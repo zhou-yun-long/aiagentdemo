@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+
+# Maven
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.eclipse/
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Env
+.env
+.env.example

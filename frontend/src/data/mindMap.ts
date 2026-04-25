@@ -1,0 +1,188 @@
+export type ThemeMode = 'light' | 'dark';
+
+export type NodeKind = 'root' | 'group' | 'case' | 'condition' | 'step' | 'expected';
+
+export type Priority = 'P0' | 'P1' | 'P2' | 'P3';
+
+export type MindNode = {
+  id: string;
+  parentId?: string;
+  title: string;
+  kind: NodeKind;
+  priority?: Priority;
+  tags?: string[];
+  ai?: boolean;
+  status?: 'pass' | 'warn' | 'fail';
+  lane: 'upper' | 'middle' | 'lower';
+  depth: number;
+  order: number;
+};
+
+export const mindNodes: MindNode[] = [
+  {
+    id: 'root',
+    title: '中心主题',
+    kind: 'root',
+    lane: 'middle',
+    depth: 0,
+    order: 0
+  },
+  {
+    id: 'login-main',
+    parentId: 'root',
+    title: '用户登录功能测试',
+    kind: 'group',
+    priority: 'P1',
+    tags: ['AI'],
+    ai: true,
+    status: 'pass',
+    lane: 'middle',
+    depth: 1,
+    order: 0
+  },
+  {
+    id: 'account-success',
+    parentId: 'login-main',
+    title: '正确账号密码登录成功',
+    kind: 'case',
+    priority: 'P0',
+    tags: ['AI'],
+    ai: true,
+    status: 'pass',
+    lane: 'upper',
+    depth: 2,
+    order: 0
+  },
+  {
+    id: 'wrong-password',
+    parentId: 'login-main',
+    title: '错误密码登录失败',
+    kind: 'case',
+    priority: 'P1',
+    tags: ['AI'],
+    ai: true,
+    status: 'warn',
+    lane: 'middle',
+    depth: 2,
+    order: 0
+  },
+  {
+    id: 'empty-account',
+    parentId: 'login-main',
+    title: '空账号提交登录失败',
+    kind: 'case',
+    priority: 'P1',
+    tags: ['AI'],
+    ai: true,
+    status: 'fail',
+    lane: 'lower',
+    depth: 2,
+    order: 0
+  },
+  {
+    id: 'success-condition',
+    parentId: 'account-success',
+    title: '用户已注册合法账号，系统处于正常运行状态',
+    kind: 'condition',
+    tags: ['前置条件', 'AI'],
+    ai: true,
+    lane: 'upper',
+    depth: 3,
+    order: 0
+  },
+  {
+    id: 'success-steps',
+    parentId: 'account-success',
+    title: '1. 打开登录页面；2. 输入正确的用户名和密码；3. 点击登录按钮',
+    kind: 'step',
+    tags: ['执行步骤', 'AI'],
+    ai: true,
+    lane: 'upper',
+    depth: 4,
+    order: 0
+  },
+  {
+    id: 'success-expected',
+    parentId: 'success-steps',
+    title: '登录成功并跳转首页',
+    kind: 'expected',
+    tags: ['预期结果', 'AI'],
+    ai: true,
+    lane: 'upper',
+    depth: 5,
+    order: 0
+  },
+  {
+    id: 'wrong-condition',
+    parentId: 'wrong-password',
+    title: '用户已注册合法账号，系统处于正常运行状态',
+    kind: 'condition',
+    tags: ['前置条件', 'AI'],
+    ai: true,
+    lane: 'middle',
+    depth: 3,
+    order: 0
+  },
+  {
+    id: 'wrong-steps',
+    parentId: 'wrong-password',
+    title: '1. 打开登录页面；2. 输入正确用户名和错误密码；3. 点击登录按钮',
+    kind: 'step',
+    tags: ['执行步骤', 'AI'],
+    ai: true,
+    lane: 'middle',
+    depth: 4,
+    order: 0
+  },
+  {
+    id: 'wrong-expected',
+    parentId: 'wrong-steps',
+    title: '页面提示用户名或密码错误',
+    kind: 'expected',
+    tags: ['预期结果', 'AI'],
+    ai: true,
+    lane: 'middle',
+    depth: 5,
+    order: 0
+  },
+  {
+    id: 'empty-condition',
+    parentId: 'empty-account',
+    title: '系统处于正常运行状态',
+    kind: 'condition',
+    tags: ['前置条件', 'AI'],
+    ai: true,
+    lane: 'lower',
+    depth: 3,
+    order: 0
+  },
+  {
+    id: 'empty-steps',
+    parentId: 'empty-account',
+    title: '1. 打开登录页面；2. 用户名留空并输入密码；3. 点击登录按钮',
+    kind: 'step',
+    tags: ['执行步骤', 'AI'],
+    ai: true,
+    lane: 'lower',
+    depth: 4,
+    order: 0
+  },
+  {
+    id: 'empty-expected',
+    parentId: 'empty-steps',
+    title: '页面提示请输入账号',
+    kind: 'expected',
+    tags: ['预期结果', 'AI'],
+    ai: true,
+    lane: 'lower',
+    depth: 5,
+    order: 0
+  }
+];
+
+export const aiRows = [
+  ['点击策略红包领取流程', '策略红包已正常展示', '加油红包 tag，进入提现详情页', '成功打开提现详情页展示提现流程'],
+  ['提现时库存校验失败', '用户进入提现详情时策略红包库存无库存', '在提现详情页点击提现按钮，再查看提示信息', '显示该红包已被抢光提示'],
+  ['提现完成后状态更新', '用户成功完成提现操作', '完成提现流程，返回活动主页', '策略红包在主页隐藏不展示'],
+  ['关闭策略红包配置时隐藏', '当前提现任务配置了策略红包但处于关闭状态', '用户进入活动主页，查看提现任务区', '不展示任何策略红包']
+];
