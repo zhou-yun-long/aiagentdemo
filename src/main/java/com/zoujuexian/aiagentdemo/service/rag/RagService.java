@@ -63,11 +63,17 @@ public class RagService {
             ChatClient chatClient,
             @Value("${spring.ai.openai.base-url}") String baseUrl,
             @Value("${spring.ai.openai.api-key}") String apiKey,
+            @Value("${rag.enabled:true}") boolean ragEnabled,
             @Value("${rag.rerank.path:/rerank}") String rerankPath,
             @Value("${rag.rerank.model:rerank}") String rerankModel) {
         this.vectorStore = new VectorStore(embeddingModel);
         this.chunkSplitter = new TextSplitter(CHUNK_SIZE, CHUNK_OVERLAP);
         this.llmReranker = new LlmReranker(baseUrl, apiKey, rerankPath, rerankModel);
+
+        if (!ragEnabled) {
+            System.out.println("[RAG] 已通过配置关闭启动加载。");
+            return;
+        }
 
         try {
             loadKnowledgeBase(KNOWLEDGE_DIR);

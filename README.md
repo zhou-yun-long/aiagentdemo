@@ -36,6 +36,36 @@ spring.ai.openai.embedding.options.model=embedding-3
 ./mvnw spring-boot:run
 ```
 
+## Treeify 前后端 Docker 启动
+
+本仓库也包含 Treeify MVP 的前后端联调应用。拉取代码后可以直接用 Docker Compose 启动：
+
+```bash
+docker compose up -d --build
+```
+
+启动后访问：
+
+```text
+http://localhost:5173/
+```
+
+基础验收：
+
+```bash
+curl -s http://localhost:5173/api/v1/projects
+```
+
+返回 JSON 中 `code` 为 `0` 即说明前端 Nginx 已成功代理到后端。
+
+说明：
+
+- 前端容器监听宿主机 `5173`，后端容器监听宿主机 `8080`。
+- 前端 Nginx 会把 `/api/` 代理到后端服务，并关闭代理缓冲以支持 SSE。
+- 后端 H2 文件数据库挂载在 Docker 命名卷 `treeify-data`，容器重建后数据不会丢失。
+- 未配置真实模型密钥时，Compose 会默认注入 `OPENAI_API_KEY=test`，便于 mock API 和联调链路启动。
+- Docker 默认设置 `RAG_ENABLED=false`，避免启动时依赖外部 embedding 服务；需要知识库检索时可改为 `true`。
+
 ## **访问**
 
 ### **前端页面**

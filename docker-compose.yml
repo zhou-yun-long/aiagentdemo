@@ -4,10 +4,13 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_CHAT_MODEL=${OPENAI_CHAT_MODEL}
-      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-test}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-glm-4.6}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-embedding-3}
+      RAG_ENABLED: ${RAG_ENABLED:-false}
+    volumes:
+      - treeify-data:/app/data
     restart: unless-stopped
 
   frontend:
@@ -18,3 +21,6 @@ services:
     ports:
       - "5173:80"
     restart: unless-stopped
+
+volumes:
+  treeify-data:
