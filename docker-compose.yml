@@ -1,7 +1,6 @@
 services:
-  ai-agent-demo:
+  backend:
     build: .
-    container_name: ai-agent-demo
     ports:
       - "8080:8080"
     environment:
@@ -9,4 +8,13 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_CHAT_MODEL=${OPENAI_CHAT_MODEL}
       - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL}
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
     restart: unless-stopped

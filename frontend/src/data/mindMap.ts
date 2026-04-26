@@ -1,28 +1,12 @@
-export type ThemeMode = 'light' | 'dark';
+import type { MindNode } from '../shared/types/workspace';
 
-export type NodeKind = 'root' | 'group' | 'case' | 'condition' | 'step' | 'expected';
-
-export type Priority = 'P0' | 'P1' | 'P2' | 'P3';
-
-export type MindNode = {
-  id: string;
-  parentId?: string;
-  title: string;
-  kind: NodeKind;
-  priority?: Priority;
-  tags?: string[];
-  ai?: boolean;
-  status?: 'pass' | 'warn' | 'fail';
-  lane: 'upper' | 'middle' | 'lower';
-  depth: number;
-  order: number;
-};
-
-export const mindNodes: MindNode[] = [
+export const initialMindNodes: MindNode[] = [
   {
     id: 'root',
-    title: '中心主题',
+    title: 'speccase 登录用例集',
     kind: 'root',
+    source: 'manual',
+    version: 1,
     lane: 'middle',
     depth: 0,
     order: 0
@@ -36,6 +20,8 @@ export const mindNodes: MindNode[] = [
     tags: ['AI'],
     ai: true,
     status: 'pass',
+    source: 'ai',
+    version: 1,
     lane: 'middle',
     depth: 1,
     order: 0
@@ -49,6 +35,9 @@ export const mindNodes: MindNode[] = [
     tags: ['AI'],
     ai: true,
     status: 'pass',
+    executionStatus: 'passed',
+    source: 'ai',
+    version: 1,
     lane: 'upper',
     depth: 2,
     order: 0
@@ -62,6 +51,9 @@ export const mindNodes: MindNode[] = [
     tags: ['AI'],
     ai: true,
     status: 'warn',
+    executionStatus: 'running',
+    source: 'ai',
+    version: 1,
     lane: 'middle',
     depth: 2,
     order: 0
@@ -75,6 +67,9 @@ export const mindNodes: MindNode[] = [
     tags: ['AI'],
     ai: true,
     status: 'fail',
+    executionStatus: 'failed',
+    source: 'ai',
+    version: 1,
     lane: 'lower',
     depth: 2,
     order: 0
@@ -86,6 +81,8 @@ export const mindNodes: MindNode[] = [
     kind: 'condition',
     tags: ['前置条件', 'AI'],
     ai: true,
+    source: 'ai',
+    version: 1,
     lane: 'upper',
     depth: 3,
     order: 0
@@ -97,6 +94,8 @@ export const mindNodes: MindNode[] = [
     kind: 'step',
     tags: ['执行步骤', 'AI'],
     ai: true,
+    source: 'ai',
+    version: 1,
     lane: 'upper',
     depth: 4,
     order: 0
@@ -108,6 +107,8 @@ export const mindNodes: MindNode[] = [
     kind: 'expected',
     tags: ['预期结果', 'AI'],
     ai: true,
+    source: 'ai',
+    version: 1,
     lane: 'upper',
     depth: 5,
     order: 0
@@ -119,6 +120,8 @@ export const mindNodes: MindNode[] = [
     kind: 'condition',
     tags: ['前置条件', 'AI'],
     ai: true,
+    source: 'ai',
+    version: 1,
     lane: 'middle',
     depth: 3,
     order: 0
@@ -130,6 +133,8 @@ export const mindNodes: MindNode[] = [
     kind: 'step',
     tags: ['执行步骤', 'AI'],
     ai: true,
+    source: 'ai',
+    version: 1,
     lane: 'middle',
     depth: 4,
     order: 0
@@ -141,6 +146,8 @@ export const mindNodes: MindNode[] = [
     kind: 'expected',
     tags: ['预期结果', 'AI'],
     ai: true,
+    source: 'ai',
+    version: 1,
     lane: 'middle',
     depth: 5,
     order: 0
@@ -152,6 +159,8 @@ export const mindNodes: MindNode[] = [
     kind: 'condition',
     tags: ['前置条件', 'AI'],
     ai: true,
+    source: 'ai',
+    version: 1,
     lane: 'lower',
     depth: 3,
     order: 0
@@ -163,6 +172,8 @@ export const mindNodes: MindNode[] = [
     kind: 'step',
     tags: ['执行步骤', 'AI'],
     ai: true,
+    source: 'ai',
+    version: 1,
     lane: 'lower',
     depth: 4,
     order: 0
@@ -174,6 +185,8 @@ export const mindNodes: MindNode[] = [
     kind: 'expected',
     tags: ['预期结果', 'AI'],
     ai: true,
+    source: 'ai',
+    version: 1,
     lane: 'lower',
     depth: 5,
     order: 0

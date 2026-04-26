@@ -1,5 +1,5 @@
 import { Check, CircleAlert, CircleX } from 'lucide-react';
-import type { MindNode } from '../data/mindMap';
+import { executionStatusLabels, type MindNode } from '../shared/types/workspace';
 
 type NodeCardProps = {
   node: MindNode;
@@ -23,6 +23,7 @@ export function NodeCard({ node, selected, onSelect }: NodeCardProps) {
       {node.status && <span className={`status ${node.status}`}>{statusIcon[node.status]}</span>}
       {node.priority && <span className={`priority ${node.priority.toLowerCase()}`}>{node.priority}</span>}
       <span className="node-title">{node.title}</span>
+      {node.executionStatus && <span className={`execution-chip ${node.executionStatus}`}>{executionStatusLabels[node.executionStatus]}</span>}
       {node.tags?.map((tag) => (
         <span className={`tag mini ${tag === 'AI' ? 'ai' : ''}`} key={tag}>
           {tag}
