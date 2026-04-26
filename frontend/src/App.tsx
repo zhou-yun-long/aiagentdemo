@@ -5,6 +5,7 @@ import { OutlinePanel } from './components/OutlinePanel';
 import { SelectionBar } from './components/SelectionBar';
 import { Toolbar } from './components/Toolbar';
 import { getWorkspaceStats, useWorkspaceStore } from './features/workspace/workspaceStore';
+import { useProjectLoader } from './features/workspace/useProjectLoader';
 import type { MindNode } from './shared/types/workspace';
 
 function collectDescendants(nodes: MindNode[], parentId: string) {
@@ -68,8 +69,14 @@ export default function App() {
   const snapshotCurrentResult = useWorkspaceStore((state) => state.snapshotCurrentResult);
   const appendAiRows = useWorkspaceStore((state) => state.appendAiRows);
 
+  const { reloadCases, pageStatus, pageError } = useProjectLoader();
+
   const selectedNode = nodes.find((node) => node.id === selectedId);
   const stats = useMemo(() => getWorkspaceStats(nodes), [nodes]);
+
+  const handleCasesConfirmed = async () => {
+    await reloadCases();
+  };
 
   const handleExportCases = () => {
     const cases = buildCaseExport(nodes);
@@ -102,28 +109,50 @@ export default function App() {
       <div className={`workspace ${assistantOpen ? '' : 'assistant-closed'} ${outlineOpen ? '' : 'outline-hidden'}`}>
         {outlineOpen && <OutlinePanel nodes={nodes} selectedId={selectedId} onSelect={selectNode} onClose={toggleOutline} />}
         <section className="work-area">
-          <MindMapCanvas
-            nodes={nodes}
-            selectedId={selectedId}
-            zoom={zoom}
-            outlineOpen={outlineOpen}
-            onSelect={selectNode}
-            onZoomIn={() => setZoom(zoom + 0.1)}
-            onZoomOut={() => setZoom(zoom - 0.1)}
-            onFit={fitZoom}
-            onToggleOutline={toggleOutline}
-            onClearExecution={clearExecutionRecords}
-            onSnapshot={snapshotCurrentResult}
-          />
-          <SelectionBar
-            node={selectedNode}
-            lastSnapshotAt={lastSnapshotAt}
-            onUpdate={updateNode}
-            onAddChild={addChildNode}
-            onDelete={deleteSelectedNode}
-          />
+          {pageStatus === 'loading' ? (
+            <div className="page-status loading">
+              <div className="spinner" />
+              <p>正在加载项目...</p>
+            </div>
+          ) : pageStatus === 'empty' ? (
+            <div className="page-status empty">
+              <p>暂无项目或用例，请先创建项目</p>
+            </div>
+          ) : (
+            <>
+              {pageStatus === 'error' && pageError && (
+                <div className="page-status error-banner">{pageError}</div>
+              )}
+              <MindMapCanvas
+                nodes={nodes}
+                selectedId={selectedId}
+                zoom={zoom}
+                outlineOpen={outlineOpen}
+                onSelect={selectNode}
+                onZoomIn={() => setZoom(zoom + 0.1)}
+                onZoomOut={() => setZoom(zoom - 0.1)}
+                onFit={fitZoom}
+                onToggleOutline={toggleOutline}
+                onClearExecution={clearExecutionRecords}
+                onSnapshot={snapshotCurrentResult}
+              />
+              <SelectionBar
+                node={selectedNode}
+                lastSnapshotAt={lastSnapshotAt}
+                onUpdate={updateNode}
+                onAddChild={addChildNode}
+                onDelete={deleteSelectedNode}
+              />
+            </>
+          )}
         </section>
-        <AiAssistantPanel open={assistantOpen} selectedNode={selectedNode} onClose={closeAssistant} onImportRows={appendAiRows} />
+        <AiAssistantPanel
+          open={assistantOpen}
+          selectedNode={selectedNode}
+          onClose={closeAssistant}
+          onImportRows={appendAiRows}
+          onCasesConfirmed={handleCasesConfirmed}
+        />
       </div>
     </div>
   );

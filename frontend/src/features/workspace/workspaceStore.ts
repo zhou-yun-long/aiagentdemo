@@ -4,6 +4,8 @@ import type { ExecutionStatus, Lane, MindNode, NodeKind, Priority, ThemeMode, Wo
 
 const laneOrder: Lane[] = ['upper', 'middle', 'lower'];
 
+export type PageStatus = 'loading' | 'ready' | 'empty' | 'error';
+
 type WorkspaceState = {
   nodes: MindNode[];
   selectedId: string;
@@ -12,6 +14,9 @@ type WorkspaceState = {
   outlineOpen: boolean;
   zoom: number;
   lastSnapshotAt?: string;
+  currentProjectId: number | null;
+  pageStatus: PageStatus;
+  pageError: string | null;
   selectNode: (id: string) => void;
   toggleTheme: () => void;
   toggleAssistant: () => void;
@@ -27,6 +32,8 @@ type WorkspaceState = {
   clearExecutionRecords: () => void;
   snapshotCurrentResult: () => void;
   appendAiRows: (rows: string[][]) => void;
+  setNodes: (nodes: MindNode[]) => void;
+  setPageStatus: (status: PageStatus, error?: string) => void;
 };
 
 function cloneNodes(nodes: MindNode[]) {
@@ -172,6 +179,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   assistantOpen: true,
   outlineOpen: true,
   zoom: 1,
+  currentProjectId: null,
+  pageStatus: 'loading',
+  pageError: null,
   selectNode: (id) => set({ selectedId: id }),
   toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
   toggleAssistant: () => set((state) => ({ assistantOpen: !state.assistantOpen })),
@@ -378,5 +388,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         nodes: [...state.nodes, ...createdNodes],
         selectedId: createdNodes[0]?.id || state.selectedId
       };
-    })
+    }),
+  setNodes: (nodes) => set({ nodes: cloneNodes(nodes) }),
+  setPageStatus: (status, error) => set({ pageStatus: status, pageError: error ?? null })
 }));

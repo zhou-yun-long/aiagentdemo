@@ -3,16 +3,17 @@ import { CheckCircle2, Circle, Loader2, PauseCircle, Play, Square } from 'lucide
 import type { GeneratedCaseDraft, GenerateStage, GenerationMode } from '../types/generation';
 import { useGenerationStore } from '../features/generation/generationStore';
 import { useGenerateStream } from '../features/generation/useGenerateStream';
+import { useWorkspaceStore } from '../features/workspace/workspaceStore';
 import { batchConfirmCases, getDefaultProjectId, getTreeifyApiMode } from '../shared/api/treeify';
 import {
   draftToGeneratedCaseDto,
-  generatedCaseDraftsToRows,
-  testCasesToRows
+  generatedCaseDraftsToRows
 } from '../shared/transforms/treeifyTransforms';
 import { CasePreviewTable } from './CasePreviewTable';
 
 type GeneratePanelProps = {
   onImportRows: (rows: string[][]) => void;
+  onCasesConfirmed?: () => Promise<void>;
 };
 
 const stageOrder: GenerateStage[] = ['e1', 'e2', 'e3', 'critic'];
@@ -24,7 +25,7 @@ const stageIcon = {
   waiting_confirm: <PauseCircle size={14} />
 };
 
-export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
+export function GeneratePanel({ onImportRows, onCasesConfirmed }: GeneratePanelProps) {
   const [confirming, setConfirming] = useState(false);
   const autoImportedTaskRef = useRef<string | undefined>(undefined);
   const mode = useGenerationStore((state) => state.mode);
@@ -42,6 +43,7 @@ export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
   const resetTask = useGenerationStore((state) => state.resetTask);
   const updateCase = useGenerationStore((state) => state.updateCase);
   const removeCase = useGenerationStore((state) => state.removeCase);
+  const currentProjectId = useWorkspaceStore((state) => state.currentProjectId);
   const { startGeneration, confirmCurrentStage, cancelGeneration } = useGenerateStream();
 
   const canStart = input.trim().length > 0 && status !== 'running' && status !== 'waiting_confirm';
@@ -82,8 +84,8 @@ export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
     setConfirming(true);
     try {
       if (source === 'real') {
-        const savedCases = await batchConfirmCases(getDefaultProjectId(), cases.map(draftToGeneratedCaseDto));
-        onImportRows(testCasesToRows(savedCases));
+        await batchConfirmCases(currentProjectId ?? getDefaultProjectId(), cases.map(draftToGeneratedCaseDto));
+        await onCasesConfirmed?.();
         return;
       }
       onImportRows(generatedCaseDraftsToRows(cases));
