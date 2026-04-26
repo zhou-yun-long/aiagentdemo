@@ -293,14 +293,14 @@ public class MockTreeifyService {
         };
     }
 
-    private int extractCriticScore(GenerateSseEventDto event, int fallback) {
+    private int extractCriticScore(GenerateSseEventDto event, Integer fallback) {
         if (event.payload() instanceof Map<?, ?> payload) {
             Object scoreObj = payload.get("criticScore");
             if (scoreObj instanceof Number num) {
                 return num.intValue();
             }
         }
-        return fallback;
+        return fallback != null ? fallback : 0;
     }
 
     // ──── Scenario resolution (in-memory, stays as-is) ────
