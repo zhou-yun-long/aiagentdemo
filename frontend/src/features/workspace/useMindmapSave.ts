@@ -3,9 +3,19 @@ import { getTreeifyApiMode, saveMindmap } from '../../shared/api/treeify';
 import { mindNodeToDto } from '../../shared/transforms/treeifyTransforms';
 import { useWorkspaceStore } from './workspaceStore';
 
+type SaveResult = {
+  type: 'success' | 'error';
+  message: string;
+};
+
 export function useMindmapSave() {
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveResult, setSaveResult] = useState<SaveResult | null>(null);
+
+  const showResult = useCallback((result: SaveResult) => {
+    setSaveResult(result);
+    setTimeout(() => setSaveResult(null), 4000);
+  }, []);
 
   const save = useCallback(async () => {
     const { nodes, currentProjectId, markClean } = useWorkspaceStore.getState();
@@ -14,13 +24,14 @@ export function useMindmapSave() {
     }
 
     setSaving(true);
-    setSaveError(null);
+    setSaveResult(null);
 
     try {
       const apiMode = getTreeifyApiMode();
 
       if (apiMode === 'mock') {
         markClean();
+        showResult({ type: 'success', message: '已保存' });
         return;
       }
 
@@ -28,18 +39,15 @@ export function useMindmapSave() {
         const dtos = nodes.map(mindNodeToDto);
         await saveMindmap(currentProjectId, dtos);
         markClean();
+        showResult({ type: 'success', message: '已保存' });
       } catch (error) {
-        if (apiMode === 'real') {
-          const message = error instanceof Error ? error.message : '保存脑图失败';
-          setSaveError(message);
-          return;
-        }
-        markClean();
+        const message = error instanceof Error ? error.message : '保存失败';
+        showResult({ type: 'error', message });
       }
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [showResult]);
 
-  return { save, saving, saveError };
+  return { save, saving, saveResult };
 }

@@ -1089,3 +1089,16 @@ textarea {
 .spinner-icon {
   animation: spin 1s linear infinite;
 }
+
+.save-result {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.save-result.success {
+  color: #156c2c;
+}
+
+.save-result.error {
+  color: #a32020;
+}

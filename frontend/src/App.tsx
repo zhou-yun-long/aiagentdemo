@@ -72,7 +72,7 @@ export default function App() {
   const appendAiRows = useWorkspaceStore((state) => state.appendAiRows);
 
   const { reloadCases, pageStatus, pageError } = useProjectLoader();
-  const { save, saving } = useMindmapSave();
+  const { save, saving, saveResult } = useMindmapSave();
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
   const stats = useMemo(() => getWorkspaceStats(nodes), [nodes]);
@@ -110,6 +110,7 @@ export default function App() {
         onExportCases={handleExportCases}
         dirty={dirty}
         saving={saving}
+        saveResult={saveResult}
         onSave={save}
       />
       <div className={`workspace ${assistantOpen ? '' : 'assistant-closed'} ${outlineOpen ? '' : 'outline-hidden'}`}>

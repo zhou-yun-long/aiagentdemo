@@ -20,6 +20,11 @@ import {
 } from 'lucide-react';
 import type { ThemeMode, WorkspaceStats } from '../shared/types/workspace';
 
+type SaveResult = {
+  type: 'success' | 'error';
+  message: string;
+};
+
 type ToolbarProps = {
   stats: WorkspaceStats;
   theme: ThemeMode;
@@ -34,6 +39,7 @@ type ToolbarProps = {
   onExportCases: () => void;
   dirty: boolean;
   saving: boolean;
+  saveResult: SaveResult | null;
   onSave: () => void;
 };
 
@@ -54,6 +60,7 @@ export function Toolbar({
   onExportCases,
   dirty,
   saving,
+  saveResult,
   onSave
 }: ToolbarProps) {
   const failedRate = stats.totalCases ? Math.round((stats.failedCases / stats.totalCases) * 10000) / 100 : 0;
@@ -144,6 +151,9 @@ export function Toolbar({
           {saving ? <Loader2 size={15} className="spinner-icon" /> : <Save size={15} />}
           保存{dirty ? ' *' : ''}
         </button>
+        {saveResult && (
+          <span className={`save-result ${saveResult.type}`}>{saveResult.message}</span>
+        )}
         <button className="tool">
           <Wrench size={15} />
           工具

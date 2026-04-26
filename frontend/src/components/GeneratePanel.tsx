@@ -58,8 +58,11 @@ export function GeneratePanel({ onImportRows, onCasesConfirmed }: GeneratePanelP
     }
 
     autoImportedTaskRef.current = taskId;
+    if (source === 'mock') {
+      return;
+    }
     onImportRows(generatedCaseDraftsToRows(cases));
-  }, [cases, onImportRows, status, taskId]);
+  }, [cases, onImportRows, source, status, taskId]);
 
   const handleStart = async () => {
     await startGeneration(input.trim(), mode);
