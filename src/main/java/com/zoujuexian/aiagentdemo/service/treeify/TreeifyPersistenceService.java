@@ -1,0 +1,414 @@
+package com.zoujuexian.aiagentdemo.service.treeify;
+
+import com.zoujuexian.aiagentdemo.api.common.ApiErrorCode;
+import com.zoujuexian.aiagentdemo.api.common.BusinessException;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.BatchConfirmCasesRequest;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CaseStatsDto;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CreateGenerateTaskRequest;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateTaskDto;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GeneratedCaseDto;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectDto;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectRequest;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseDto;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseRequest;
+import com.zoujuexian.aiagentdemo.domain.entity.TreeifyGenerationTask;
+import com.zoujuexian.aiagentdemo.domain.entity.TreeifyProject;
+import com.zoujuexian.aiagentdemo.domain.entity.TreeifyTestCase;
+import com.zoujuexian.aiagentdemo.domain.repository.TreeifyGenerationTaskRepository;
+import com.zoujuexian.aiagentdemo.domain.repository.TreeifyProjectRepository;
+import com.zoujuexian.aiagentdemo.domain.repository.TreeifyTestCaseRepository;
+import jakarta.annotation.PostConstruct;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+@Service
+public class TreeifyPersistenceService {
+
+    private static final Set<String> PRIORITIES = Set.of("P0", "P1", "P2", "P3");
+    private static final Set<String> EXECUTION_STATUSES = Set.of(
+            "not_run", "running", "passed", "failed", "blocked", "skipped"
+    );
+
+    private final TreeifyProjectRepository projectRepo;
+    private final TreeifyTestCaseRepository caseRepo;
+    private final TreeifyGenerationTaskRepository taskRepo;
+
+    public TreeifyPersistenceService(
+            TreeifyProjectRepository projectRepo,
+            TreeifyTestCaseRepository caseRepo,
+            TreeifyGenerationTaskRepository taskRepo
+    ) {
+        this.projectRepo = projectRepo;
+        this.caseRepo = caseRepo;
+        this.taskRepo = taskRepo;
+    }
+
+    @PostConstruct
+    public void seedDemoData() {
+        if (projectRepo.count() > 0) {
+            return;
+        }
+        ProjectDto project = createProject(new ProjectRequest("speccase 示例项目", "AI 驱动测试用例生成平台联调项目"));
+        createCase(project.id(), new TestCaseRequest(
+                null,
+                "正确账号密码登录成功",
+                "用户已注册合法账号，系统处于正常运行状态",
+                List.of("打开登录页面", "输入正确的用户名和密码", "点击登录按钮"),
+                "登录成功并跳转首页",
+                "P0",
+                List.of("Web", "AI"),
+                "ai",
+                "passed",
+                Map.of("x", 560, "y", 120, "collapsed", false),
+                null
+        ));
+        createCase(project.id(), new TestCaseRequest(
+                null,
+                "错误密码登录失败",
+                "用户已注册合法账号，系统处于正常运行状态",
+                List.of("打开登录页面", "输入正确用户名和错误密码", "点击登录按钮"),
+                "页面提示用户名或密码错误",
+                "P1",
+                List.of("Web", "AI"),
+                "ai",
+                "failed",
+                Map.of("x", 560, "y", 260, "collapsed", false),
+                null
+        ));
+        createCase(project.id(), new TestCaseRequest(
+                null,
+                "空账号提交登录失败",
+                "系统处于正常运行状态",
+                List.of("打开登录页面", "用户名留空并输入密码", "点击登录按钮"),
+                "页面提示请输入账号",
+                "P1",
+                List.of("Web", "AI"),
+                "ai",
+                "not_run",
+                Map.of("x", 560, "y", 410, "collapsed", false),
+                null
+        ));
+    }
+
+    // ──── Project CRUD ────
+
+    public List<ProjectDto> listProjects() {
+        return projectRepo.findAll().stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    public ProjectDto getProject(Long projectId) {
+        return toDto(findProject(projectId));
+    }
+
+    public ProjectDto createProject(ProjectRequest request) {
+        String name = requireText(request == null ? null : request.name(), "项目名称不能为空");
+        LocalDateTime now = LocalDateTime.now();
+        TreeifyProject entity = new TreeifyProject();
+        entity.setName(name);
+        entity.setDescription(defaultText(request == null ? null : request.description(), ""));
+        entity.setStatus("active");
+        entity.setCreatedAt(now);
+        entity.setUpdatedAt(now);
+        return toDto(projectRepo.save(entity));
+    }
+
+    public ProjectDto updateProject(Long projectId, ProjectRequest request) {
+        TreeifyProject entity = findProject(projectId);
+        String name = requireText(request == null ? null : request.name(), "项目名称不能为空");
+        entity.setName(name);
+        entity.setDescription(defaultText(request == null ? null : request.description(), ""));
+        entity.setUpdatedAt(LocalDateTime.now());
+        return toDto(projectRepo.save(entity));
+    }
+
+    public ProjectDto archiveProject(Long projectId) {
+        TreeifyProject entity = findProject(projectId);
+        entity.setStatus("archived");
+        entity.setUpdatedAt(LocalDateTime.now());
+        return toDto(projectRepo.save(entity));
+    }
+
+    // ──── TestCase CRUD ────
+
+    public List<TestCaseDto> listCases(Long projectId) {
+        findProject(projectId);
+        return caseRepo.findAllByProjectIdOrderById(projectId).stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    public TestCaseDto createCase(Long projectId, TestCaseRequest request) {
+        findProject(projectId);
+        TreeifyTestCase entity = buildEntity(null, projectId, request, 1, LocalDateTime.now(), LocalDateTime.now());
+        return toDto(caseRepo.save(entity));
+    }
+
+    public TestCaseDto updateCase(Long caseId, TestCaseRequest request) {
+        TreeifyTestCase entity = findCase(caseId);
+        if (request != null && request.version() != null && request.version() != entity.getVersion()) {
+            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "用例版本已变化，请刷新后重试");
+        }
+        TreeifyTestCase updated = buildEntity(
+                caseId,
+                entity.getProjectId(),
+                request,
+                entity.getVersion() + 1,
+                entity.getCreatedAt(),
+                LocalDateTime.now()
+        );
+        return toDto(caseRepo.save(updated));
+    }
+
+    public void deleteCase(Long caseId) {
+        TreeifyTestCase entity = findCase(caseId);
+        caseRepo.delete(entity);
+    }
+
+    public TestCaseDto updateExecutionStatus(Long caseId, String executionStatus) {
+        TreeifyTestCase entity = findCase(caseId);
+        entity.setExecutionStatus(normalizeExecutionStatus(executionStatus));
+        entity.setVersion(entity.getVersion() + 1);
+        entity.setUpdatedAt(LocalDateTime.now());
+        return toDto(caseRepo.save(entity));
+    }
+
+    public List<TestCaseDto> batchConfirm(BatchConfirmCasesRequest request) {
+        if (request == null || request.projectId() == null) {
+            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "projectId 不能为空");
+        }
+        findProject(request.projectId());
+        List<GeneratedCaseDto> generatedCases = request.cases() == null ? List.of() : request.cases();
+        if (generatedCases.isEmpty()) {
+            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "确认用例不能为空");
+        }
+
+        List<TestCaseDto> savedCases = new ArrayList<>();
+        for (GeneratedCaseDto generatedCase : generatedCases) {
+            TestCaseRequest caseRequest = new TestCaseRequest(
+                    null,
+                    generatedCase.title(),
+                    generatedCase.precondition(),
+                    generatedCase.steps(),
+                    generatedCase.expected(),
+                    generatedCase.priority(),
+                    generatedCase.tags(),
+                    defaultText(generatedCase.source(), "ai"),
+                    "not_run",
+                    Map.of("collapsed", false),
+                    null
+            );
+            savedCases.add(createCase(request.projectId(), caseRequest));
+        }
+        return savedCases;
+    }
+
+    public CaseStatsDto getCaseStats(Long projectId) {
+        findProject(projectId);
+        long total = caseRepo.countByProjectId(projectId);
+        long measured = caseRepo.countByProjectIdAndExecutionStatusNot(projectId, "not_run");
+        long passed = caseRepo.countByProjectIdAndExecutionStatus(projectId, "passed");
+        double passRate = measured == 0 ? 0 : ((double) passed / measured);
+        return new CaseStatsDto(total, measured, passed, passRate);
+    }
+
+    // ──── GenerationTask CRUD ────
+
+    public GenerateTaskDto createGenerateTask(Long projectId, CreateGenerateTaskRequest request) {
+        findProject(projectId);
+        String mode = normalizeMode(request == null ? null : request.mode());
+        String input = requireText(request == null ? null : request.input(), "需求输入不能为空");
+
+        String taskId = UUID.randomUUID().toString();
+        LocalDateTime now = LocalDateTime.now();
+        TreeifyGenerationTask entity = new TreeifyGenerationTask();
+        entity.setTaskId(taskId);
+        entity.setProjectId(projectId);
+        entity.setMode(mode);
+        entity.setInputText(input);
+        entity.setStatus("pending");
+        entity.setStreamUrl("/api/v1/generate/" + taskId + "/stream");
+        entity.setCreatedAt(now);
+        entity.setUpdatedAt(now);
+        taskRepo.save(entity);
+        return toDto(entity);
+    }
+
+    public GenerateTaskDto getTask(String taskId) {
+        return toDto(findTask(taskId));
+    }
+
+    public String getTaskInput(String taskId) {
+        return defaultText(findTask(taskId).getInputText(), "");
+    }
+
+    public GenerateTaskDto updateTaskStatus(
+            String taskId,
+            String status,
+            String currentStage,
+            Integer criticScore,
+            LocalDateTime completedAt
+    ) {
+        TreeifyGenerationTask entity = findTask(taskId);
+        entity.setStatus(status);
+        entity.setCurrentStage(currentStage);
+        entity.setCriticScore(criticScore);
+        entity.setUpdatedAt(LocalDateTime.now());
+        if (completedAt != null) {
+            entity.setCompletedAt(completedAt);
+        }
+        return toDto(taskRepo.save(entity));
+    }
+
+    // ──── Entity helpers ────
+
+    private TreeifyProject findProject(Long projectId) {
+        return projectRepo.findById(projectId)
+                .orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "项目不存在: " + projectId));
+    }
+
+    private TreeifyTestCase findCase(Long caseId) {
+        return caseRepo.findById(caseId)
+                .orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "用例不存在: " + caseId));
+    }
+
+    private TreeifyGenerationTask findTask(String taskId) {
+        return taskRepo.findById(taskId)
+                .orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "生成任务不存在: " + taskId));
+    }
+
+    // ──── Entity → DTO converters ────
+
+    private ProjectDto toDto(TreeifyProject entity) {
+        return new ProjectDto(
+                entity.getId(),
+                entity.getName(),
+                entity.getDescription(),
+                entity.getStatus(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt()
+        );
+    }
+
+    private TestCaseDto toDto(TreeifyTestCase entity) {
+        return new TestCaseDto(
+                entity.getId(),
+                entity.getProjectId(),
+                entity.getParentId(),
+                entity.getTitle(),
+                entity.getPrecondition(),
+                entity.getSteps() == null ? List.of() : List.copyOf(entity.getSteps()),
+                entity.getExpected(),
+                entity.getPriority(),
+                entity.getTags() == null ? List.of() : List.copyOf(entity.getTags()),
+                entity.getSource(),
+                entity.getExecutionStatus(),
+                entity.getLayout() == null ? Map.of("collapsed", false) : Map.copyOf(entity.getLayout()),
+                entity.getVersion(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt()
+        );
+    }
+
+    private GenerateTaskDto toDto(TreeifyGenerationTask entity) {
+        return new GenerateTaskDto(
+                entity.getTaskId(),
+                entity.getProjectId(),
+                entity.getMode(),
+                entity.getStatus(),
+                entity.getCurrentStage(),
+                entity.getStreamUrl(),
+                entity.getCriticScore(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt(),
+                entity.getCompletedAt()
+        );
+    }
+
+    // ──── Build entity from request ────
+
+    private TreeifyTestCase buildEntity(
+            Long caseId,
+            Long projectId,
+            TestCaseRequest request,
+            int version,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt
+    ) {
+        if (request == null) {
+            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "用例请求不能为空");
+        }
+        String title = requireText(request.title(), "用例标题不能为空");
+        List<String> steps = request.steps() == null ? List.of() : request.steps().stream()
+                .filter(step -> step != null && !step.isBlank())
+                .toList();
+        if (steps.isEmpty()) {
+            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "执行步骤不能为空");
+        }
+        requireText(request.expected(), "预期结果不能为空");
+
+        TreeifyTestCase entity = new TreeifyTestCase();
+        if (caseId != null) {
+            entity.setId(caseId);
+        }
+        entity.setProjectId(projectId);
+        entity.setParentId(request.parentId());
+        entity.setTitle(title);
+        entity.setPrecondition(defaultText(request.precondition(), ""));
+        entity.setSteps(steps);
+        entity.setExpected(request.expected().trim());
+        entity.setPriority(normalizePriority(request.priority()));
+        entity.setTags(request.tags() == null ? List.of() : List.copyOf(request.tags()));
+        entity.setSource(defaultText(request.source(), "manual"));
+        entity.setExecutionStatus(normalizeExecutionStatus(request.executionStatus()));
+        entity.setLayout(request.layout() == null ? Map.of("collapsed", false) : Map.copyOf(request.layout()));
+        entity.setVersion(version);
+        entity.setCreatedAt(createdAt);
+        entity.setUpdatedAt(updatedAt);
+        return entity;
+    }
+
+    // ──── Validation helpers ────
+
+    private String requireText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ApiErrorCode.BAD_REQUEST, message);
+        }
+        return value.trim();
+    }
+
+    private String defaultText(String value, String fallback) {
+        return value == null ? fallback : value;
+    }
+
+    private String normalizePriority(String priority) {
+        String safe = defaultText(priority, "P1").trim().toUpperCase();
+        if (!PRIORITIES.contains(safe)) {
+            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "优先级只支持 P0/P1/P2/P3");
+        }
+        return safe;
+    }
+
+    private String normalizeExecutionStatus(String status) {
+        String safe = defaultText(status, "not_run").trim();
+        if (!EXECUTION_STATUSES.contains(safe)) {
+            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "执行状态不合法: " + safe);
+        }
+        return safe;
+    }
+
+    private String normalizeMode(String mode) {
+        String safe = defaultText(mode, "auto").trim();
+        if (!"auto".equals(safe) && !"step".equals(safe)) {
+            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "生成模式只支持 auto 或 step");
+        }
+        return safe;
+    }
+}

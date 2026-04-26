@@ -20,7 +20,6 @@ import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseRequest;
-import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -28,24 +27,17 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * In-memory speccase mock service for frontend/backend contract development.
+ * Delegates CRUD to TreeifyPersistenceService (H2 DB) and keeps SSE mock
+ * generation in memory.
  */
 @Service
 public class MockTreeifyService {
 
-    private static final Set<String> PRIORITIES = Set.of("P0", "P1", "P2", "P3");
-    private static final Set<String> EXECUTION_STATUSES = Set.of(
-            "not_run", "running", "passed", "failed", "blocked", "skipped"
-    );
-
-    private final AtomicLong projectIdGenerator = new AtomicLong(1);
-    private final AtomicLong caseIdGenerator = new AtomicLong(1000);
+    private final TreeifyPersistenceService persistence;
 
     private final Map<Long, ProjectDto> projects = new ConcurrentHashMap<>();
     private final Map<Long, TestCaseDto> casesById = new ConcurrentHashMap<>();
@@ -53,111 +45,59 @@ public class MockTreeifyService {
     private final Map<String, GenerateTaskDto> tasks = new ConcurrentHashMap<>();
     private final Map<String, String> taskInputs = new ConcurrentHashMap<>();
 
-    @PostConstruct
-    public void seedData() {
-        ProjectDto project = createProject(new ProjectRequest("speccase 示例项目", "AI 驱动测试用例生成平台联调项目"));
-        createCase(project.id(), new TestCaseRequest(
-                null,
-                "正确账号密码登录成功",
-                "用户已注册合法账号，系统处于正常运行状态",
-                List.of("打开登录页面", "输入正确的用户名和密码", "点击登录按钮"),
-                "登录成功并跳转首页",
-                "P0",
-                List.of("Web", "AI"),
-                "ai",
-                "passed",
-                Map.of("x", 560, "y", 120, "collapsed", false),
-                null
-        ));
-        createCase(project.id(), new TestCaseRequest(
-                null,
-                "错误密码登录失败",
-                "用户已注册合法账号，系统处于正常运行状态",
-                List.of("打开登录页面", "输入正确用户名和错误密码", "点击登录按钮"),
-                "页面提示用户名或密码错误",
-                "P1",
-                List.of("Web", "AI"),
-                "ai",
-                "failed",
-                Map.of("x", 560, "y", 260, "collapsed", false),
-                null
-        ));
-        createCase(project.id(), new TestCaseRequest(
-                null,
-                "空账号提交登录失败",
-                "系统处于正常运行状态",
-                List.of("打开登录页面", "用户名留空并输入密码", "点击登录按钮"),
-                "页面提示请输入账号",
-                "P1",
-                List.of("Web", "AI"),
-                "ai",
-                "not_run",
-                Map.of("x", 560, "y", 410, "collapsed", false),
-                null
-        ));
+    public MockTreeifyService(TreeifyPersistenceService persistence) {
+        this.persistence = persistence;
     }
 
+    // ──── Project CRUD (delegates to DB, syncs memory) ────
+
     public List<ProjectDto> listProjects() {
+        List<ProjectDto> fromDb = persistence.listProjects();
+        if (!fromDb.isEmpty()) {
+            return fromDb;
+        }
         return projects.values().stream()
                 .sorted(Comparator.comparing(ProjectDto::id))
                 .toList();
     }
 
     public ProjectDto createProject(ProjectRequest request) {
-        String name = requireText(request == null ? null : request.name(), "项目名称不能为空");
-        LocalDateTime now = LocalDateTime.now();
-        long id = projectIdGenerator.getAndIncrement();
-        ProjectDto project = new ProjectDto(
-                id,
-                name,
-                defaultText(request == null ? null : request.description(), ""),
-                "active",
-                now,
-                now
-        );
-        projects.put(id, project);
-        caseIdsByProject.put(id, new ArrayList<>());
+        ProjectDto project = persistence.createProject(request);
+        syncToMemory(project);
         return project;
     }
 
     public ProjectDto getProject(Long projectId) {
-        ProjectDto project = projects.get(projectId);
-        if (project == null) {
-            throw new BusinessException(ApiErrorCode.NOT_FOUND, "项目不存在: " + projectId);
+        try {
+            return persistence.getProject(projectId);
+        } catch (BusinessException e) {
+            ProjectDto project = projects.get(projectId);
+            if (project == null) {
+                throw e;
+            }
+            return project;
         }
-        return project;
     }
 
     public ProjectDto updateProject(Long projectId, ProjectRequest request) {
-        ProjectDto current = getProject(projectId);
-        String name = requireText(request == null ? null : request.name(), "项目名称不能为空");
-        ProjectDto updated = new ProjectDto(
-                current.id(),
-                name,
-                defaultText(request == null ? null : request.description(), ""),
-                current.status(),
-                current.createdAt(),
-                LocalDateTime.now()
-        );
-        projects.put(projectId, updated);
-        return updated;
+        ProjectDto project = persistence.updateProject(projectId, request);
+        syncToMemory(project);
+        return project;
     }
 
     public ProjectDto archiveProject(Long projectId) {
-        ProjectDto current = getProject(projectId);
-        ProjectDto archived = new ProjectDto(
-                current.id(),
-                current.name(),
-                current.description(),
-                "archived",
-                current.createdAt(),
-                LocalDateTime.now()
-        );
-        projects.put(projectId, archived);
-        return archived;
+        ProjectDto project = persistence.archiveProject(projectId);
+        syncToMemory(project);
+        return project;
     }
 
+    // ──── TestCase CRUD (delegates to DB, syncs memory) ────
+
     public List<TestCaseDto> listCases(Long projectId) {
+        List<TestCaseDto> fromDb = persistence.listCases(projectId);
+        if (!fromDb.isEmpty()) {
+            return fromDb;
+        }
         getProject(projectId);
         return caseIdsByProject.getOrDefault(projectId, List.of()).stream()
                 .map(casesById::get)
@@ -167,127 +107,76 @@ public class MockTreeifyService {
     }
 
     public TestCaseDto createCase(Long projectId, TestCaseRequest request) {
-        getProject(projectId);
-        TestCaseDto testCase = buildCase(null, projectId, request, 1, LocalDateTime.now(), LocalDateTime.now());
-        casesById.put(testCase.id(), testCase);
-        caseIdsByProject.computeIfAbsent(projectId, ignored -> new ArrayList<>()).add(testCase.id());
+        TestCaseDto testCase = persistence.createCase(projectId, request);
+        syncToMemory(testCase);
         return testCase;
     }
 
     public TestCaseDto updateCase(Long caseId, TestCaseRequest request) {
-        TestCaseDto current = getCase(caseId);
-        if (request != null && request.version() != null && request.version() != current.version()) {
-            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "用例版本已变化，请刷新后重试");
-        }
-        TestCaseDto updated = buildCase(caseId, current.projectId(), request, current.version() + 1, current.createdAt(), LocalDateTime.now());
-        casesById.put(caseId, updated);
-        return updated;
+        TestCaseDto testCase = persistence.updateCase(caseId, request);
+        syncToMemory(testCase);
+        return testCase;
     }
 
     public void deleteCase(Long caseId) {
         TestCaseDto removed = casesById.remove(caseId);
-        if (removed == null) {
-            throw new BusinessException(ApiErrorCode.NOT_FOUND, "用例不存在: " + caseId);
+        if (removed != null) {
+            caseIdsByProject.computeIfPresent(removed.projectId(), (projectId, ids) -> {
+                ids.remove(caseId);
+                return ids;
+            });
         }
-        caseIdsByProject.computeIfPresent(removed.projectId(), (projectId, ids) -> {
-            ids.remove(caseId);
-            return ids;
-        });
+        persistence.deleteCase(caseId);
     }
 
     public TestCaseDto updateExecutionStatus(Long caseId, String executionStatus) {
-        TestCaseDto current = getCase(caseId);
-        String safeStatus = normalizeExecutionStatus(executionStatus);
-        TestCaseDto updated = new TestCaseDto(
-                current.id(),
-                current.projectId(),
-                current.parentId(),
-                current.title(),
-                current.precondition(),
-                current.steps(),
-                current.expected(),
-                current.priority(),
-                current.tags(),
-                current.source(),
-                safeStatus,
-                current.layout(),
-                current.version() + 1,
-                current.createdAt(),
-                LocalDateTime.now()
-        );
-        casesById.put(caseId, updated);
-        return updated;
+        TestCaseDto testCase = persistence.updateExecutionStatus(caseId, executionStatus);
+        syncToMemory(testCase);
+        return testCase;
     }
 
     public List<TestCaseDto> batchConfirm(BatchConfirmCasesRequest request) {
-        if (request == null || request.projectId() == null) {
-            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "projectId 不能为空");
-        }
-        getProject(request.projectId());
-        List<GeneratedCaseDto> generatedCases = request.cases() == null ? List.of() : request.cases();
-        if (generatedCases.isEmpty()) {
-            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "确认用例不能为空");
-        }
-
-        List<TestCaseDto> savedCases = new ArrayList<>();
-        for (GeneratedCaseDto generatedCase : generatedCases) {
-            TestCaseRequest caseRequest = new TestCaseRequest(
-                    null,
-                    generatedCase.title(),
-                    generatedCase.precondition(),
-                    generatedCase.steps(),
-                    generatedCase.expected(),
-                    generatedCase.priority(),
-                    generatedCase.tags(),
-                    defaultText(generatedCase.source(), "ai"),
-                    "not_run",
-                    Map.of("collapsed", false),
-                    null
-            );
-            savedCases.add(createCase(request.projectId(), caseRequest));
-        }
-        return savedCases;
+        List<TestCaseDto> cases = persistence.batchConfirm(request);
+        cases.forEach(this::syncToMemory);
+        return cases;
     }
 
     public CaseStatsDto getCaseStats(Long projectId) {
-        List<TestCaseDto> testCases = listCases(projectId);
-        long total = testCases.size();
-        long measured = testCases.stream().filter(item -> !"not_run".equals(item.executionStatus())).count();
-        long passed = testCases.stream().filter(item -> "passed".equals(item.executionStatus())).count();
-        double passRate = measured == 0 ? 0 : ((double) passed / measured);
-        return new CaseStatsDto(total, measured, passed, passRate);
+        try {
+            return persistence.getCaseStats(projectId);
+        } catch (BusinessException e) {
+            getProject(projectId);
+            List<TestCaseDto> testCases = caseIdsByProject.getOrDefault(projectId, List.of()).stream()
+                    .map(casesById::get)
+                    .filter(item -> item != null)
+                    .toList();
+            long total = testCases.size();
+            long measured = testCases.stream().filter(item -> !"not_run".equals(item.executionStatus())).count();
+            long passed = testCases.stream().filter(item -> "passed".equals(item.executionStatus())).count();
+            double passRate = measured == 0 ? 0 : ((double) passed / measured);
+            return new CaseStatsDto(total, measured, passed, passRate);
+        }
     }
 
-    public GenerateTaskDto createGenerateTask(Long projectId, CreateGenerateTaskRequest request) {
-        getProject(projectId);
-        String mode = normalizeMode(request == null ? null : request.mode());
-        String input = requireText(request == null ? null : request.input(), "需求输入不能为空");
+    // ──── GenerateTask CRUD (delegates to DB for CRUD, memory for SSE state) ────
 
-        String taskId = UUID.randomUUID().toString();
-        LocalDateTime now = LocalDateTime.now();
-        GenerateTaskDto task = new GenerateTaskDto(
-                taskId,
-                projectId,
-                mode,
-                "pending",
-                null,
-                "/api/v1/generate/" + taskId + "/stream",
-                null,
-                now,
-                now,
-                null
-        );
-        tasks.put(taskId, task);
-        taskInputs.put(taskId, input);
+    public GenerateTaskDto createGenerateTask(Long projectId, CreateGenerateTaskRequest request) {
+        GenerateTaskDto task = persistence.createGenerateTask(projectId, request);
+        tasks.put(task.taskId(), task);
+        taskInputs.put(task.taskId(), request != null ? defaultText(request.input(), "") : "");
         return task;
     }
 
     public GenerateTaskDto getTask(String taskId) {
-        GenerateTaskDto task = tasks.get(taskId);
-        if (task == null) {
-            throw new BusinessException(ApiErrorCode.NOT_FOUND, "生成任务不存在: " + taskId);
+        try {
+            return persistence.getTask(taskId);
+        } catch (BusinessException e) {
+            GenerateTaskDto task = tasks.get(taskId);
+            if (task == null) {
+                throw e;
+            }
+            return task;
         }
-        return task;
     }
 
     public GenerateTaskDto confirmTask(String taskId, ConfirmGenerateTaskRequest request) {
@@ -300,6 +189,8 @@ public class MockTreeifyService {
         GenerateTaskDto current = getTask(taskId);
         return updateTask(current, "canceled", current.currentStage(), current.criticScore(), LocalDateTime.now());
     }
+
+    // ──── SSE event generation (pure in-memory, stays as-is) ────
 
     public List<GenerateSseEventDto> buildMockGenerateEvents(String taskId) {
         GenerateTaskDto task = getTask(taskId);
@@ -379,8 +270,14 @@ public class MockTreeifyService {
         };
     }
 
+    // ──── Scenario resolution (in-memory, stays as-is) ────
+
     private MockScenario resolveScenario(String taskId) {
         String input = defaultText(taskInputs.get(taskId), "");
+        if (input.isBlank()) {
+            input = persistence.getTaskInput(taskId);
+            taskInputs.put(taskId, input);
+        }
         if (input.contains("红包") || input.contains("提现") || input.contains("tag")) {
             return redPacketScenario();
         }
@@ -428,6 +325,8 @@ public class MockTreeifyService {
         );
     }
 
+    // ──── Internal helpers ────
+
     private boolean isWaitingForConfirmation(GenerateSseEventDto event) {
         if (!(event.payload() instanceof Map<?, ?> payload)) {
             return false;
@@ -435,51 +334,18 @@ public class MockTreeifyService {
         return Boolean.TRUE.equals(payload.get("needConfirm"));
     }
 
-    private TestCaseDto getCase(Long caseId) {
-        TestCaseDto testCase = casesById.get(caseId);
-        if (testCase == null) {
-            throw new BusinessException(ApiErrorCode.NOT_FOUND, "用例不存在: " + caseId);
-        }
-        return testCase;
+    private void syncToMemory(ProjectDto project) {
+        projects.put(project.id(), project);
+        caseIdsByProject.putIfAbsent(project.id(), new ArrayList<>());
     }
 
-    private TestCaseDto buildCase(
-            Long caseId,
-            Long projectId,
-            TestCaseRequest request,
-            int version,
-            LocalDateTime createdAt,
-            LocalDateTime updatedAt
-    ) {
-        if (request == null) {
-            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "用例请求不能为空");
+    private void syncToMemory(TestCaseDto testCase) {
+        casesById.put(testCase.id(), testCase);
+        caseIdsByProject.computeIfAbsent(testCase.projectId(), ignored -> new ArrayList<>());
+        List<Long> ids = caseIdsByProject.get(testCase.projectId());
+        if (!ids.contains(testCase.id())) {
+            ids.add(testCase.id());
         }
-        String title = requireText(request.title(), "用例标题不能为空");
-        List<String> steps = request.steps() == null ? List.of() : request.steps().stream()
-                .filter(step -> step != null && !step.isBlank())
-                .toList();
-        if (steps.isEmpty()) {
-            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "执行步骤不能为空");
-        }
-        String expected = requireText(request.expected(), "预期结果不能为空");
-        long id = caseId == null ? caseIdGenerator.getAndIncrement() : caseId;
-        return new TestCaseDto(
-                id,
-                projectId,
-                request.parentId(),
-                title,
-                defaultText(request.precondition(), ""),
-                steps,
-                expected,
-                normalizePriority(request.priority()),
-                request.tags() == null ? List.of() : List.copyOf(request.tags()),
-                defaultText(request.source(), "manual"),
-                normalizeExecutionStatus(request.executionStatus()),
-                request.layout() == null ? Map.of("collapsed", false) : Map.copyOf(request.layout()),
-                version,
-                createdAt,
-                updatedAt
-        );
     }
 
     private GenerateTaskDto updateTask(
@@ -502,6 +368,7 @@ public class MockTreeifyService {
                 completedAt
         );
         tasks.put(updated.taskId(), updated);
+        persistence.updateTaskStatus(current.taskId(), status, currentStage, criticScore, completedAt);
         return updated;
     }
 
@@ -596,8 +463,7 @@ public class MockTreeifyService {
             Object e2Result,
             String e3Chunk,
             List<GeneratedCaseDto> cases
-    ) {
-    }
+    ) {}
 
     private String requireText(String value, String message) {
         if (value == null || value.isBlank()) {
@@ -608,29 +474,5 @@ public class MockTreeifyService {
 
     private String defaultText(String value, String fallback) {
         return value == null ? fallback : value;
-    }
-
-    private String normalizePriority(String priority) {
-        String safePriority = defaultText(priority, "P1").trim().toUpperCase();
-        if (!PRIORITIES.contains(safePriority)) {
-            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "优先级只支持 P0/P1/P2/P3");
-        }
-        return safePriority;
-    }
-
-    private String normalizeExecutionStatus(String executionStatus) {
-        String safeStatus = defaultText(executionStatus, "not_run").trim();
-        if (!EXECUTION_STATUSES.contains(safeStatus)) {
-            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "执行状态不合法: " + safeStatus);
-        }
-        return safeStatus;
-    }
-
-    private String normalizeMode(String mode) {
-        String safeMode = defaultText(mode, "auto").trim();
-        if (!"auto".equals(safeMode) && !"step".equals(safeMode)) {
-            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "生成模式只支持 auto 或 step");
-        }
-        return safeMode;
     }
 }

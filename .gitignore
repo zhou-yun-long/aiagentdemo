@@ -8,6 +8,7 @@
 
 # Backend (Java/Maven)
 target/
+data/
 
 # Frontend
 frontend/node_modules/
