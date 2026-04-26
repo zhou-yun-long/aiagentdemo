@@ -17,6 +17,7 @@ type WorkspaceState = {
   currentProjectId: number | null;
   pageStatus: PageStatus;
   pageError: string | null;
+  dirty: boolean;
   selectNode: (id: string) => void;
   toggleTheme: () => void;
   toggleAssistant: () => void;
@@ -34,6 +35,7 @@ type WorkspaceState = {
   appendAiRows: (rows: string[][]) => void;
   setNodes: (nodes: MindNode[]) => void;
   setPageStatus: (status: PageStatus, error?: string) => void;
+  markClean: () => void;
 };
 
 function cloneNodes(nodes: MindNode[]) {
@@ -182,6 +184,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   currentProjectId: null,
   pageStatus: 'loading',
   pageError: null,
+  dirty: false,
   selectNode: (id) => set({ selectedId: id }),
   toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
   toggleAssistant: () => set((state) => ({ assistantOpen: !state.assistantOpen })),
@@ -197,7 +200,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
               version: (node.version || 1) + 1
             }
           : node
-      )
+      ),
+      dirty: true
     })),
   addChildNode: () =>
     set((state) => {
@@ -214,7 +218,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
       return {
         nodes: [...state.nodes, node],
-        selectedId: node.id
+        selectedId: node.id,
+        dirty: true
       };
     }),
   addSiblingNode: () =>
@@ -226,7 +231,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           return state;
         }
         const node = makeNode('group', root, 'middle', 1, getNextOrder(state.nodes, root.id, 'middle', 1));
-        return { nodes: [...state.nodes, node], selectedId: node.id };
+        return { nodes: [...state.nodes, node], selectedId: node.id, dirty: true };
       }
 
       const parent = state.nodes.find((node) => node.id === selected.parentId);
@@ -235,7 +240,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
       return {
         nodes: [...state.nodes, node],
-        selectedId: node.id
+        selectedId: node.id,
+        dirty: true
       };
     }),
   deleteSelectedNode: () =>
@@ -248,7 +254,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       const deleteIds = getDescendantIds(state.nodes, selected.id);
       return {
         nodes: state.nodes.filter((node) => !deleteIds.has(node.id)),
-        selectedId: selected.parentId || 'root'
+        selectedId: selected.parentId || 'root',
+        dirty: true
       };
     }),
   moveSelectedNode: (direction) =>
@@ -286,7 +293,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
             };
           }
           return node;
-        })
+        }),
+        dirty: true
       };
     }),
   setZoom: (zoom) => set({ zoom: Math.min(1.4, Math.max(0.6, Math.round(zoom * 10) / 10)) }),
@@ -300,7 +308,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
               executionStatus: 'not_run'
             }
           : node
-      )
+      ),
+      dirty: true
     })),
   snapshotCurrentResult: () =>
     set({
@@ -386,9 +395,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
       return {
         nodes: [...state.nodes, ...createdNodes],
-        selectedId: createdNodes[0]?.id || state.selectedId
+        selectedId: createdNodes[0]?.id || state.selectedId,
+        dirty: true
       };
     }),
-  setNodes: (nodes) => set({ nodes: cloneNodes(nodes) }),
-  setPageStatus: (status, error) => set({ pageStatus: status, pageError: error ?? null })
+  setNodes: (nodes) => set({ nodes: cloneNodes(nodes), dirty: false }),
+  setPageStatus: (status, error) => set({ pageStatus: status, pageError: error ?? null }),
+  markClean: () => set({ dirty: false })
 }));

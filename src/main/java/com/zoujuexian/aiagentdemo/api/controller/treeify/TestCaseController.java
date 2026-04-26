@@ -3,6 +3,8 @@ package com.zoujuexian.aiagentdemo.api.controller.treeify;
 import com.zoujuexian.aiagentdemo.api.common.ApiResponse;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.BatchConfirmCasesRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CaseStatsDto;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.MindmapNodeDto;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.SaveMindmapRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.UpdateExecutionStatusRequest;
@@ -40,6 +42,19 @@ public class TestCaseController {
     @GetMapping("/projects/{projectId}/cases/stats")
     public ApiResponse<CaseStatsDto> getCaseStats(@PathVariable Long projectId) {
         return ApiResponse.ok(treeifyService.getCaseStats(projectId));
+    }
+
+    @GetMapping("/projects/{projectId}/mindmap")
+    public ApiResponse<List<MindmapNodeDto>> getMindmap(@PathVariable Long projectId) {
+        return ApiResponse.ok(treeifyService.getMindmap(projectId));
+    }
+
+    @PutMapping("/projects/{projectId}/mindmap")
+    public ApiResponse<List<MindmapNodeDto>> saveMindmap(
+            @PathVariable Long projectId,
+            @RequestBody SaveMindmapRequest request
+    ) {
+        return ApiResponse.ok(treeifyService.saveMindmap(projectId, request));
     }
 
     @PostMapping("/projects/{projectId}/cases")

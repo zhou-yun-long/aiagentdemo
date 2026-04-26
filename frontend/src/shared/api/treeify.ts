@@ -4,6 +4,7 @@ import type {
   ConfirmGenerateTaskRequest,
   CreateGenerateTaskRequest,
   GenerateTaskDto,
+  MindmapNodeDto,
   ProjectDto,
   TestCaseDto,
   TreeifyApiMode
@@ -69,4 +70,15 @@ export function batchConfirmCases(projectId: number, cases: BatchConfirmCasesReq
 
 export function getGenerateStreamUrl(task: GenerateTaskDto) {
   return task.streamUrl || `/api/v1/generate/${task.taskId}/stream`;
+}
+
+export function saveMindmap(projectId: number, nodes: MindmapNodeDto[]) {
+  return request<MindmapNodeDto[]>(`/api/v1/projects/${projectId}/mindmap`, {
+    method: 'PUT',
+    body: JSON.stringify({ nodes })
+  });
+}
+
+export function getMindmap(projectId: number) {
+  return request<MindmapNodeDto[]>(`/api/v1/projects/${projectId}/mindmap`);
 }

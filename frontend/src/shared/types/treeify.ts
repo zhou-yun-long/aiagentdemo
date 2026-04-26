@@ -101,3 +101,26 @@ export type CaseImportResult = {
   source: 'local' | 'api';
   cases: GeneratedCaseDraft[];
 };
+
+export type MindmapNodeDto = {
+  id: string;
+  parentId?: string;
+  caseId?: string;
+  projectId?: string;
+  title: string;
+  kind: string;
+  priority?: Priority;
+  tags?: string[];
+  status?: string;
+  executionStatus?: ExecutionStatus;
+  source?: string;
+  version: number;
+  lane: string;
+  depth: number;
+  order: number;
+  layout?: { x?: number; y?: number; width?: number; height?: number };
+};
+
+export type SaveMindmapRequest = {
+  nodes: MindmapNodeDto[];
+};

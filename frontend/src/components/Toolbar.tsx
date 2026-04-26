@@ -7,6 +7,7 @@ import {
   Fullscreen,
   Image,
   Link,
+  Loader2,
   Moon,
   PanelRightOpen,
   Plus,
@@ -31,6 +32,9 @@ type ToolbarProps = {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onExportCases: () => void;
+  dirty: boolean;
+  saving: boolean;
+  onSave: () => void;
 };
 
 const priorities = ['P0', 'P1', 'P2', 'P3'];
@@ -47,7 +51,10 @@ export function Toolbar({
   onDelete,
   onMoveUp,
   onMoveDown,
-  onExportCases
+  onExportCases,
+  dirty,
+  saving,
+  onSave
 }: ToolbarProps) {
   const failedRate = stats.totalCases ? Math.round((stats.failedCases / stats.totalCases) * 10000) / 100 : 0;
 
@@ -133,9 +140,9 @@ export function Toolbar({
           <Image size={15} />
           图片
         </button>
-        <button className="tool">
-          <Save size={15} />
-          备注
+        <button className="tool" disabled={!dirty || saving} onClick={onSave}>
+          {saving ? <Loader2 size={15} className="spinner-icon" /> : <Save size={15} />}
+          保存{dirty ? ' *' : ''}
         </button>
         <button className="tool">
           <Wrench size={15} />

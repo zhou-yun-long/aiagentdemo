@@ -1,5 +1,5 @@
 import type { GeneratedCaseDraft, GenerateStage } from '../../types/generation';
-import type { GeneratedCaseDto, GenerateSsePayload, TestCaseDto } from '../types/treeify';
+import type { GeneratedCaseDto, GenerateSsePayload, MindmapNodeDto, TestCaseDto } from '../types/treeify';
 import type { MindNode, Priority } from '../types/workspace';
 
 const lanes: MindNode['lane'][] = ['upper', 'middle', 'lower'];
@@ -151,4 +151,46 @@ export function testCasesToMindNodes(cases: TestCaseDto[]) {
 
 export function isGenerateStage(value: unknown): value is GenerateStage {
   return value === 'e1' || value === 'e2' || value === 'e3' || value === 'critic';
+}
+
+export function mindNodeToDto(node: MindNode): MindmapNodeDto {
+  return {
+    id: node.id,
+    parentId: node.parentId,
+    caseId: node.caseId,
+    projectId: node.projectId,
+    title: node.title,
+    kind: node.kind,
+    priority: node.priority,
+    tags: node.tags ? [...node.tags] : undefined,
+    status: node.status,
+    executionStatus: node.executionStatus,
+    source: node.source,
+    version: node.version || 1,
+    lane: node.lane,
+    depth: node.depth,
+    order: node.order,
+    layout: node.layout ? { ...node.layout } : undefined
+  };
+}
+
+export function mindNodeFromDto(dto: MindmapNodeDto): MindNode {
+  return {
+    id: dto.id,
+    parentId: dto.parentId,
+    caseId: dto.caseId,
+    projectId: dto.projectId,
+    title: dto.title,
+    kind: dto.kind as MindNode['kind'],
+    priority: dto.priority,
+    tags: dto.tags ? [...dto.tags] : undefined,
+    status: dto.status as MindNode['status'],
+    executionStatus: dto.executionStatus,
+    source: dto.source as MindNode['source'],
+    version: dto.version,
+    lane: dto.lane as MindNode['lane'],
+    depth: dto.depth,
+    order: dto.order,
+    layout: dto.layout ? { ...dto.layout } : undefined
+  };
 }

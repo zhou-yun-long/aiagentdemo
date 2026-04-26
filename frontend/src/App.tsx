@@ -5,6 +5,7 @@ import { OutlinePanel } from './components/OutlinePanel';
 import { SelectionBar } from './components/SelectionBar';
 import { Toolbar } from './components/Toolbar';
 import { getWorkspaceStats, useWorkspaceStore } from './features/workspace/workspaceStore';
+import { useMindmapSave } from './features/workspace/useMindmapSave';
 import { useProjectLoader } from './features/workspace/useProjectLoader';
 import type { MindNode } from './shared/types/workspace';
 
@@ -67,9 +68,11 @@ export default function App() {
   const fitZoom = useWorkspaceStore((state) => state.fitZoom);
   const clearExecutionRecords = useWorkspaceStore((state) => state.clearExecutionRecords);
   const snapshotCurrentResult = useWorkspaceStore((state) => state.snapshotCurrentResult);
+  const dirty = useWorkspaceStore((state) => state.dirty);
   const appendAiRows = useWorkspaceStore((state) => state.appendAiRows);
 
   const { reloadCases, pageStatus, pageError } = useProjectLoader();
+  const { save, saving } = useMindmapSave();
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
   const stats = useMemo(() => getWorkspaceStats(nodes), [nodes]);
@@ -105,6 +108,9 @@ export default function App() {
         onMoveUp={() => moveSelectedNode('up')}
         onMoveDown={() => moveSelectedNode('down')}
         onExportCases={handleExportCases}
+        dirty={dirty}
+        saving={saving}
+        onSave={save}
       />
       <div className={`workspace ${assistantOpen ? '' : 'assistant-closed'} ${outlineOpen ? '' : 'outline-hidden'}`}>
         {outlineOpen && <OutlinePanel nodes={nodes} selectedId={selectedId} onSelect={selectNode} onClose={toggleOutline} />}

@@ -16,8 +16,10 @@ import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventNam
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateTaskDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GeneratedCaseDto;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.MindmapNodeDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectRequest;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.SaveMindmapRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseRequest;
 import org.springframework.stereotype.Service;
@@ -158,6 +160,14 @@ public class MockTreeifyService {
         }
     }
 
+    public List<MindmapNodeDto> getMindmap(Long projectId) {
+        return persistence.getMindmap(projectId);
+    }
+
+    public List<MindmapNodeDto> saveMindmap(Long projectId, SaveMindmapRequest request) {
+        return persistence.saveMindmap(projectId, request);
+    }
+
     // ──── GenerateTask CRUD (delegates to DB for CRUD, memory for SSE state) ────
 
     public GenerateTaskDto createGenerateTask(Long projectId, CreateGenerateTaskRequest request) {
@@ -177,6 +187,15 @@ public class MockTreeifyService {
             }
             return task;
         }
+    }
+
+    public String getTaskInput(String taskId) {
+        String input = taskInputs.get(taskId);
+        if (input == null || input.isBlank()) {
+            input = persistence.getTaskInput(taskId);
+            taskInputs.put(taskId, input);
+        }
+        return input;
     }
 
     public GenerateTaskDto confirmTask(String taskId, ConfirmGenerateTaskRequest request) {
@@ -261,13 +280,27 @@ public class MockTreeifyService {
                     yield updateTask(current, "wait_confirm", event.stage(), current.criticScore(), null);
                 }
                 if ("critic".equals(event.stage())) {
-                    yield updateTask(current, "critic", "critic", 88, null);
+                    int score = extractCriticScore(event, current.criticScore());
+                    yield updateTask(current, "critic", "critic", score, null);
                 }
                 yield current;
             }
-            case GENERATION_COMPLETE -> updateTask(current, "done", null, 88, LocalDateTime.now());
+            case GENERATION_COMPLETE -> {
+                int score = extractCriticScore(event, current.criticScore());
+                yield updateTask(current, "done", null, score, LocalDateTime.now());
+            }
             default -> current;
         };
+    }
+
+    private int extractCriticScore(GenerateSseEventDto event, int fallback) {
+        if (event.payload() instanceof Map<?, ?> payload) {
+            Object scoreObj = payload.get("criticScore");
+            if (scoreObj instanceof Number num) {
+                return num.intValue();
+            }
+        }
+        return fallback;
     }
 
     // ──── Scenario resolution (in-memory, stays as-is) ────

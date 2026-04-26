@@ -7,17 +7,22 @@ import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CaseStatsDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CreateGenerateTaskRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateTaskDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GeneratedCaseDto;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.MindmapNodeDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectRequest;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.SaveMindmapRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseRequest;
 import com.zoujuexian.aiagentdemo.domain.entity.TreeifyGenerationTask;
+import com.zoujuexian.aiagentdemo.domain.entity.TreeifyMindmapNode;
 import com.zoujuexian.aiagentdemo.domain.entity.TreeifyProject;
 import com.zoujuexian.aiagentdemo.domain.entity.TreeifyTestCase;
 import com.zoujuexian.aiagentdemo.domain.repository.TreeifyGenerationTaskRepository;
+import com.zoujuexian.aiagentdemo.domain.repository.TreeifyMindmapNodeRepository;
 import com.zoujuexian.aiagentdemo.domain.repository.TreeifyProjectRepository;
 import com.zoujuexian.aiagentdemo.domain.repository.TreeifyTestCaseRepository;
 import jakarta.annotation.PostConstruct;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -38,15 +43,18 @@ public class TreeifyPersistenceService {
     private final TreeifyProjectRepository projectRepo;
     private final TreeifyTestCaseRepository caseRepo;
     private final TreeifyGenerationTaskRepository taskRepo;
+    private final TreeifyMindmapNodeRepository mindmapRepo;
 
     public TreeifyPersistenceService(
             TreeifyProjectRepository projectRepo,
             TreeifyTestCaseRepository caseRepo,
-            TreeifyGenerationTaskRepository taskRepo
+            TreeifyGenerationTaskRepository taskRepo,
+            TreeifyMindmapNodeRepository mindmapRepo
     ) {
         this.projectRepo = projectRepo;
         this.caseRepo = caseRepo;
         this.taskRepo = taskRepo;
+        this.mindmapRepo = mindmapRepo;
     }
 
     @PostConstruct
@@ -219,6 +227,38 @@ public class TreeifyPersistenceService {
         return new CaseStatsDto(total, measured, passed, passRate);
     }
 
+    // ──── Mindmap CRUD ────
+
+    public List<MindmapNodeDto> getMindmap(Long projectId) {
+        findProject(projectId);
+        List<MindmapNodeDto> savedNodes = mindmapRepo.findAllByProjectIdOrderByOrderIndexAscDepthAscIdAsc(projectId).stream()
+                .map(this::toDto)
+                .toList();
+        if (!savedNodes.isEmpty()) {
+            return savedNodes;
+        }
+        return deriveMindmapFromCases(projectId);
+    }
+
+    @Transactional
+    public List<MindmapNodeDto> saveMindmap(Long projectId, SaveMindmapRequest request) {
+        findProject(projectId);
+        List<MindmapNodeDto> nodes = request == null || request.nodes() == null ? List.of() : request.nodes();
+        mindmapRepo.deleteByProjectId(projectId);
+        if (nodes.isEmpty()) {
+            return List.of();
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        List<TreeifyMindmapNode> entities = new ArrayList<>();
+        for (int i = 0; i < nodes.size(); i++) {
+            entities.add(buildMindmapEntity(projectId, nodes.get(i), i, now));
+        }
+        return mindmapRepo.saveAll(entities).stream()
+                .map(this::toDto)
+                .toList();
+    }
+
     // ──── GenerationTask CRUD ────
 
     public GenerateTaskDto createGenerateTask(Long projectId, CreateGenerateTaskRequest request) {
@@ -332,6 +372,27 @@ public class TreeifyPersistenceService {
         );
     }
 
+    private MindmapNodeDto toDto(TreeifyMindmapNode entity) {
+        return new MindmapNodeDto(
+                entity.getId(),
+                entity.getParentId(),
+                entity.getCaseId(),
+                String.valueOf(entity.getProjectId()),
+                entity.getTitle(),
+                entity.getKind(),
+                entity.getPriority(),
+                entity.getTags() == null ? List.of() : List.copyOf(entity.getTags()),
+                entity.getStatus(),
+                entity.getExecutionStatus(),
+                entity.getSource(),
+                entity.getVersion(),
+                entity.getLane(),
+                entity.getDepth(),
+                entity.getOrderIndex(),
+                entity.getLayout() == null ? Map.of() : Map.copyOf(entity.getLayout())
+        );
+    }
+
     // ──── Build entity from request ────
 
     private TreeifyTestCase buildEntity(
@@ -375,6 +436,124 @@ public class TreeifyPersistenceService {
         return entity;
     }
 
+    private TreeifyMindmapNode buildMindmapEntity(Long projectId, MindmapNodeDto node, int fallbackOrder, LocalDateTime now) {
+        if (node == null) {
+            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "脑图节点不能为空");
+        }
+        TreeifyMindmapNode entity = new TreeifyMindmapNode();
+        entity.setId(requireText(node.id(), "脑图节点 id 不能为空"));
+        entity.setProjectId(projectId);
+        entity.setParentId(blankToNull(node.parentId()));
+        entity.setCaseId(blankToNull(node.caseId()));
+        entity.setTitle(requireText(node.title(), "脑图节点标题不能为空"));
+        entity.setKind(requireText(node.kind(), "脑图节点类型不能为空"));
+        entity.setPriority(blankToNull(node.priority()));
+        entity.setTags(node.tags() == null ? List.of() : List.copyOf(node.tags()));
+        entity.setStatus(blankToNull(node.status()));
+        entity.setExecutionStatus(blankToNull(node.executionStatus()));
+        entity.setSource(defaultText(node.source(), "manual"));
+        entity.setVersion(node.version() == null ? 1 : node.version());
+        entity.setLane(defaultText(node.lane(), "middle"));
+        entity.setDepth(node.depth() == null ? 0 : node.depth());
+        entity.setOrderIndex(node.order() == null ? fallbackOrder : node.order());
+        entity.setLayout(node.layout() == null ? Map.of() : Map.copyOf(node.layout()));
+        entity.setCreatedAt(now);
+        entity.setUpdatedAt(now);
+        return entity;
+    }
+
+    private List<MindmapNodeDto> deriveMindmapFromCases(Long projectId) {
+        List<TestCaseDto> testCases = listCases(projectId);
+        List<MindmapNodeDto> nodes = new ArrayList<>();
+        String[] lanes = {"upper", "middle", "lower"};
+        for (int i = 0; i < testCases.size(); i++) {
+            TestCaseDto testCase = testCases.get(i);
+            String lane = lanes[i % lanes.length];
+            int order = i / lanes.length;
+            String caseNodeId = "api-case-" + testCase.id();
+            String stepNodeId = caseNodeId + "-steps";
+            String source = "ai".equals(testCase.source()) ? "ai" : "manual";
+            String status = switch (testCase.executionStatus()) {
+                case "passed" -> "pass";
+                case "failed" -> "fail";
+                default -> "warn";
+            };
+            nodes.add(new MindmapNodeDto(
+                    caseNodeId,
+                    null,
+                    String.valueOf(testCase.id()),
+                    String.valueOf(testCase.projectId()),
+                    testCase.title(),
+                    "case",
+                    testCase.priority(),
+                    testCase.tags(),
+                    status,
+                    testCase.executionStatus(),
+                    source,
+                    testCase.version(),
+                    lane,
+                    2,
+                    order,
+                    testCase.layout()
+            ));
+            nodes.add(new MindmapNodeDto(
+                    caseNodeId + "-condition",
+                    caseNodeId,
+                    String.valueOf(testCase.id()),
+                    String.valueOf(testCase.projectId()),
+                    defaultText(testCase.precondition(), "无前置条件"),
+                    "condition",
+                    null,
+                    List.of("前置条件"),
+                    null,
+                    null,
+                    source,
+                    testCase.version(),
+                    lane,
+                    3,
+                    order,
+                    Map.of()
+            ));
+            nodes.add(new MindmapNodeDto(
+                    stepNodeId,
+                    caseNodeId,
+                    String.valueOf(testCase.id()),
+                    String.valueOf(testCase.projectId()),
+                    String.join("；", testCase.steps()),
+                    "step",
+                    null,
+                    List.of("执行步骤"),
+                    null,
+                    null,
+                    source,
+                    testCase.version(),
+                    lane,
+                    4,
+                    order,
+                    Map.of()
+            ));
+            nodes.add(new MindmapNodeDto(
+                    caseNodeId + "-expected",
+                    stepNodeId,
+                    String.valueOf(testCase.id()),
+                    String.valueOf(testCase.projectId()),
+                    testCase.expected(),
+                    "expected",
+                    null,
+                    List.of("预期结果"),
+                    null,
+                    null,
+                    source,
+                    testCase.version(),
+                    lane,
+                    5,
+                    order,
+                    Map.of()
+            ));
+        }
+        return nodes;
+    }
+
     // ──── Validation helpers ────
 
     private String requireText(String value, String message) {
@@ -386,6 +565,10 @@ public class TreeifyPersistenceService {
 
     private String defaultText(String value, String fallback) {
         return value == null ? fallback : value;
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     private String normalizePriority(String priority) {

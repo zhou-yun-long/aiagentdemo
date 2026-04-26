@@ -6,6 +6,7 @@ import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CreateGenerateTaskR
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateTaskDto;
 import com.zoujuexian.aiagentdemo.service.treeify.MockTreeifyService;
+import com.zoujuexian.aiagentdemo.service.treeify.TreeifyGenerationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -25,9 +26,11 @@ import java.time.Duration;
 public class GenerateController {
 
     private final MockTreeifyService treeifyService;
+    private final TreeifyGenerationService generationService;
 
-    public GenerateController(MockTreeifyService treeifyService) {
+    public GenerateController(MockTreeifyService treeifyService, TreeifyGenerationService generationService) {
         this.treeifyService = treeifyService;
+        this.generationService = generationService;
     }
 
     @PostMapping("/projects/{projectId}/generate")
@@ -47,7 +50,9 @@ public class GenerateController {
 
     @GetMapping(value = "/generate/{taskId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<GenerateSseEventDto>> streamGenerateTask(@PathVariable String taskId) {
-        return Flux.fromIterable(treeifyService.buildMockGenerateEvents(taskId))
+        GenerateTaskDto task = treeifyService.getTask(taskId);
+        String input = treeifyService.getTaskInput(taskId);
+        return Flux.fromIterable(generationService.buildEvents(taskId, task.mode(), input, task.currentStage()))
                 .delayElements(Duration.ofMillis(350))
                 .doOnNext(treeifyService::applyEvent)
                 .map(event -> ServerSentEvent.<GenerateSseEventDto>builder()
