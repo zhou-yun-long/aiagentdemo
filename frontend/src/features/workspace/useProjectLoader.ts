@@ -1,9 +1,9 @@
 import { useCallback, useEffect } from 'react';
 import { initialMindNodes } from '../../data/mindMap';
-import { getProjectCases, getTreeifyApiMode, listProjects } from '../../shared/api/treeify';
+import { getMindmap, getProjectCases, getTreeifyApiMode, listProjects } from '../../shared/api/treeify';
 import type { TestCaseDto } from '../../shared/types/treeify';
 import type { MindNode } from '../../shared/types/workspace';
-import { testCasesToMindNodes } from '../../shared/transforms/treeifyTransforms';
+import { mindNodeFromDto, testCasesToMindNodes } from '../../shared/transforms/treeifyTransforms';
 import { useWorkspaceStore } from './workspaceStore';
 
 function buildNodeTree(projectName: string, cases: TestCaseDto[]): MindNode[] {
@@ -51,7 +51,7 @@ export function useProjectLoader() {
   const pageStatus = useWorkspaceStore((state) => state.pageStatus);
   const pageError = useWorkspaceStore((state) => state.pageError);
 
-  const loadCases = useCallback(
+  const loadCasesFromCasesApi = useCallback(
     async (projectId: number, projectName: string) => {
       const cases = await getProjectCases(projectId);
       const nodes = buildNodeTree(projectName, cases);
@@ -59,6 +59,24 @@ export function useProjectLoader() {
       setPageStatus(cases.length ? 'ready' : 'empty');
     },
     [setNodes, setPageStatus]
+  );
+
+  const loadCases = useCallback(
+    async (projectId: number, projectName: string) => {
+      try {
+        const mindmapNodes = await getMindmap(projectId);
+        if (mindmapNodes && mindmapNodes.length > 0) {
+          const nodes = mindmapNodes.map(mindNodeFromDto);
+          setNodes(nodes);
+          setPageStatus('ready');
+          return;
+        }
+      } catch {
+        // mindmap not available, fall through to cases API
+      }
+      await loadCasesFromCasesApi(projectId, projectName);
+    },
+    [setNodes, setPageStatus, loadCasesFromCasesApi]
   );
 
   const loadFromApi = useCallback(async () => {
