@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { CheckCircle2, Circle, Loader2, PauseCircle, Play, Square } from 'lucide-react';
 import type { GeneratedCaseDraft, GenerateStage, GenerationMode } from '../types/generation';
 import { useGenerationStore } from '../features/generation/generationStore';
@@ -27,10 +27,8 @@ const stageIcon = {
 
 export function GeneratePanel({ onImportRows, onCasesConfirmed }: GeneratePanelProps) {
   const [confirming, setConfirming] = useState(false);
-  const autoImportedTaskRef = useRef<string | undefined>(undefined);
   const mode = useGenerationStore((state) => state.mode);
   const input = useGenerationStore((state) => state.input);
-  const taskId = useGenerationStore((state) => state.taskId);
   const status = useGenerationStore((state) => state.status);
   const source = useGenerationStore((state) => state.source);
   const activeStage = useGenerationStore((state) => state.activeStage);
@@ -51,18 +49,6 @@ export function GeneratePanel({ onImportRows, onCasesConfirmed }: GeneratePanelP
   const streamStage = activeStage ? stages[activeStage] : undefined;
 
   const apiMode = getTreeifyApiMode();
-
-  useEffect(() => {
-    if (status !== 'done' || !cases.length || autoImportedTaskRef.current === taskId) {
-      return;
-    }
-
-    autoImportedTaskRef.current = taskId;
-    if (source === 'mock') {
-      return;
-    }
-    onImportRows(generatedCaseDraftsToRows(cases));
-  }, [cases, onImportRows, source, status, taskId]);
 
   const handleStart = async () => {
     await startGeneration(input.trim(), mode);
