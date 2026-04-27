@@ -13,7 +13,6 @@ import { CasePreviewTable } from './CasePreviewTable';
 
 type GeneratePanelProps = {
   onImportRows: (rows: string[][]) => void;
-  onCasesConfirmed?: () => Promise<void>;
 };
 
 const stageOrder: GenerateStage[] = ['e1', 'e2', 'e3', 'critic'];
@@ -25,7 +24,7 @@ const stageIcon = {
   waiting_confirm: <PauseCircle size={14} />
 };
 
-export function GeneratePanel({ onImportRows, onCasesConfirmed }: GeneratePanelProps) {
+export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
   const [confirming, setConfirming] = useState(false);
   const mode = useGenerationStore((state) => state.mode);
   const input = useGenerationStore((state) => state.input);
@@ -74,8 +73,6 @@ export function GeneratePanel({ onImportRows, onCasesConfirmed }: GeneratePanelP
     try {
       if (source === 'real') {
         await batchConfirmCases(currentProjectId ?? getDefaultProjectId(), cases.map(draftToGeneratedCaseDto));
-        await onCasesConfirmed?.();
-        return;
       }
       onImportRows(generatedCaseDraftsToRows(cases));
     } catch {

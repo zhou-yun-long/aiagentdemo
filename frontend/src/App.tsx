@@ -71,15 +71,11 @@ export default function App() {
   const dirty = useWorkspaceStore((state) => state.dirty);
   const appendAiRows = useWorkspaceStore((state) => state.appendAiRows);
 
-  const { reloadCases, pageStatus, pageError } = useProjectLoader();
+  const { pageStatus, pageError } = useProjectLoader();
   const { save, saving, saveResult } = useMindmapSave();
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
   const stats = useMemo(() => getWorkspaceStats(nodes), [nodes]);
-
-  const handleCasesConfirmed = async () => {
-    await reloadCases();
-  };
 
   const handleExportCases = () => {
     const cases = buildCaseExport(nodes);
@@ -158,7 +154,6 @@ export default function App() {
           selectedNode={selectedNode}
           onClose={closeAssistant}
           onImportRows={appendAiRows}
-          onCasesConfirmed={handleCasesConfirmed}
         />
       </div>
     </div>

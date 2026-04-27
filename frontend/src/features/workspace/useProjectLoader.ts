@@ -45,6 +45,58 @@ function buildNodeTree(projectName: string, cases: TestCaseDto[]): MindNode[] {
   return [root, group, ...caseNodes];
 }
 
+function normalizeMindmapTree(projectName: string, nodes: MindNode[]): MindNode[] {
+  const existingRoot = nodes.find((node) => node.kind === 'root');
+  const root: MindNode =
+    existingRoot ?? {
+      id: 'root',
+      title: projectName,
+      kind: 'root',
+      source: 'manual',
+      version: 1,
+      lane: 'middle',
+      depth: 0,
+      order: 0
+    };
+
+  const existingGroup = nodes.find((node) => node.kind === 'group');
+  const group: MindNode =
+    existingGroup ?? {
+      id: 'default-group',
+      parentId: root.id,
+      title: '默认模块',
+      kind: 'group',
+      priority: 'P1',
+      source: 'manual',
+      version: 1,
+      lane: 'middle',
+      depth: 1,
+      order: 0
+    };
+
+  const normalizedNodes = nodes.map((node) => {
+    if (node.id === root.id) {
+      return { ...node, parentId: undefined, depth: 0 };
+    }
+
+    if (node.kind === 'group' && !node.parentId) {
+      return { ...node, parentId: root.id, depth: 1 };
+    }
+
+    if (node.kind === 'case' && !node.parentId) {
+      return { ...node, parentId: group.id, depth: Math.max(node.depth, group.depth + 1) };
+    }
+
+    return node;
+  });
+
+  return [
+    ...(existingRoot ? [] : [root]),
+    ...(existingGroup ? [] : [group]),
+    ...normalizedNodes
+  ];
+}
+
 export function useProjectLoader() {
   const setNodes = useWorkspaceStore((state) => state.setNodes);
   const setPageStatus = useWorkspaceStore((state) => state.setPageStatus);
@@ -66,7 +118,7 @@ export function useProjectLoader() {
       try {
         const mindmapNodes = await getMindmap(projectId);
         if (mindmapNodes && mindmapNodes.length > 0) {
-          const nodes = mindmapNodes.map(mindNodeFromDto);
+          const nodes = normalizeMindmapTree(projectName, mindmapNodes.map(mindNodeFromDto));
           setNodes(nodes);
           setPageStatus('ready');
           return;

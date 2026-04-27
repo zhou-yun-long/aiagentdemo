@@ -9,13 +9,12 @@ type AiAssistantPanelProps = {
   selectedNode?: MindNode;
   onClose: () => void;
   onImportRows: (rows: string[][]) => void;
-  onCasesConfirmed: () => Promise<void>;
 };
 
 const defaultPrompt =
   '策略红包仍有余额\n策略红包的功能交互\n策略红包展示对应 tag，新人红包、加油红包\n点击策略红包，进入提现详情页，被选中后流程提示“该红包已被抢光”\n提现完成后，回到活动主页';
 
-export function AiAssistantPanel({ open, selectedNode, onClose, onImportRows, onCasesConfirmed }: AiAssistantPanelProps) {
+export function AiAssistantPanel({ open, selectedNode, onClose, onImportRows }: AiAssistantPanelProps) {
   const [prompt, setPrompt] = useState(defaultPrompt);
 
   const quoteSelectedNode = () => {
@@ -34,7 +33,7 @@ export function AiAssistantPanel({ open, selectedNode, onClose, onImportRows, on
         </button>
       </div>
       <div className="assistant-body">
-        <GeneratePanel onImportRows={onImportRows} onCasesConfirmed={onCasesConfirmed} />
+        <GeneratePanel onImportRows={onImportRows} />
         <section className="assistant-quick-card">
           <div className="assistant-card-title">
             <strong>快速解析</strong>
