@@ -76,6 +76,9 @@ export default function App() {
   const moveSelectedNode = useWorkspaceStore((state) => state.moveSelectedNode);
   const setZoom = useWorkspaceStore((state) => state.setZoom);
   const fitZoom = useWorkspaceStore((state) => state.fitZoom);
+  const updateNodePosition = useWorkspaceStore((state) => state.updateNodePosition);
+  const runAutoLayout = useWorkspaceStore((state) => state.runAutoLayout);
+  const fitToScreen = useWorkspaceStore((state) => state.fitToScreen);
   const clearExecutionRecords = useWorkspaceStore((state) => state.clearExecutionRecords);
   const snapshotCurrentResult = useWorkspaceStore((state) => state.snapshotCurrentResult);
   const dirty = useWorkspaceStore((state) => state.dirty);
@@ -164,9 +167,12 @@ export default function App() {
                 onZoomIn={() => setZoom(zoom + 0.1)}
                 onZoomOut={() => setZoom(zoom - 0.1)}
                 onFit={fitZoom}
+                onFitToScreen={fitToScreen}
                 onToggleOutline={toggleOutline}
                 onClearExecution={clearExecutionRecords}
                 onSnapshot={snapshotCurrentResult}
+                onNodeDragEnd={updateNodePosition}
+                onAutoLayout={runAutoLayout}
               />
               <SelectionBar
                 node={selectedNode}

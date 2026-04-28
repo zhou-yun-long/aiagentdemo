@@ -48,6 +48,9 @@ type WorkspaceState = {
   moveSelectedNode: (direction: 'up' | 'down') => void;
   setZoom: (zoom: number) => void;
   fitZoom: () => void;
+  fitToScreen: (zoom: number) => void;
+  updateNodePosition: (id: string, x: number, y: number) => void;
+  runAutoLayout: () => void;
   clearExecutionRecords: () => void;
   snapshotCurrentResult: () => void;
   appendAiRows: (rows: string[][]) => void;
@@ -370,6 +373,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     }),
   setZoom: (zoom) => set({ zoom: Math.min(1.4, Math.max(0.6, Math.round(zoom * 10) / 10)) }),
   fitZoom: () => set({ zoom: 0.8 }),
+  fitToScreen: (zoom) => set({ zoom: Math.min(1.4, Math.max(0.6, Math.round(zoom * 10) / 10)) }),
+  updateNodePosition: (id, x, y) =>
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        node.id === id
+          ? { ...node, layout: { ...node.layout, x: Math.max(0, Math.round(x)), y: Math.max(0, Math.round(y)) } }
+          : node
+      ),
+      dirty: true
+    })),
+  runAutoLayout: () =>
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        node.layout?.x !== undefined || node.layout?.y !== undefined
+          ? { ...node, layout: { ...node.layout, x: undefined, y: undefined } }
+          : node
+      ),
+      dirty: true
+    })),
   clearExecutionRecords: () =>
     set((state) => ({
       nodes: state.nodes.map((node) =>

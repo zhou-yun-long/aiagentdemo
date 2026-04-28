@@ -453,8 +453,8 @@ textarea {
 .connectors {
   position: absolute;
   inset: 0;
-  width: 1320px;
-  height: 620px;
+  width: 100%;
+  height: 100%;
 }
 
 .connectors path {
@@ -611,6 +611,30 @@ textarea {
 .canvas-actions {
   right: 18px;
   bottom: 12px;
+}
+
+.zoom-indicator {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 10;
+  animation: fadeIn 150ms ease;
+}
+
+.node-card.draggable {
+  cursor: grab;
+}
+
+.node-card.draggable:active {
+  cursor: grabbing;
 }
 
 .selection-bar {
@@ -1482,6 +1506,15 @@ button.small:disabled {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
