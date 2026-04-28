@@ -54,7 +54,7 @@ function createNodeId(kind: NodeKind) {
   return `${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function getDescendantIds(nodes: MindNode[], id: string) {
+export function getDescendantIds(nodes: MindNode[], id: string) {
   const ids = new Set<string>([id]);
   let changed = true;
 

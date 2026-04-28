@@ -4,32 +4,19 @@ import { MindMapCanvas } from './components/MindMapCanvas';
 import { OutlinePanel } from './components/OutlinePanel';
 import { SelectionBar } from './components/SelectionBar';
 import { Toolbar } from './components/Toolbar';
-import { getWorkspaceStats, useWorkspaceStore } from './features/workspace/workspaceStore';
+import { getDescendantIds, getWorkspaceStats, useWorkspaceStore } from './features/workspace/workspaceStore';
 import { useCasePersistence } from './features/workspace/useCasePersistence';
 import { useMindmapSave } from './features/workspace/useMindmapSave';
 import { useProjectLoader } from './features/workspace/useProjectLoader';
 import { useWorkspaceAutosave } from './features/workspace/useWorkspaceAutosave';
 import type { MindNode } from './shared/types/workspace';
 
-function collectDescendants(nodes: MindNode[], parentId: string) {
-  const descendants: MindNode[] = [];
-  const queue = [parentId];
-
-  while (queue.length) {
-    const currentId = queue.shift();
-    const children = nodes.filter((node) => node.parentId === currentId);
-    descendants.push(...children);
-    queue.push(...children.map((node) => node.id));
-  }
-
-  return descendants;
-}
-
 function buildCaseExport(nodes: MindNode[]) {
   return nodes
     .filter((node) => node.kind === 'case')
     .map((caseNode) => {
-      const descendants = collectDescendants(nodes, caseNode.id);
+      const descendantIds = getDescendantIds(nodes, caseNode.id);
+      const descendants = nodes.filter((node) => descendantIds.has(node.id));
       const condition = nodes.find((node) => node.parentId === caseNode.id && node.kind === 'condition');
       const step = nodes.find((node) => node.parentId === caseNode.id && node.kind === 'step');
       const expected = step ? nodes.find((node) => node.parentId === step.id && node.kind === 'expected') : undefined;

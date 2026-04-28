@@ -3,18 +3,8 @@ import { initialMindNodes } from '../../data/mindMap';
 import { getMindmap, getProjectCases, getProjectCaseStats, getTreeifyApiMode, listProjects } from '../../shared/api/treeify';
 import type { TestCaseDto } from '../../shared/types/treeify';
 import type { MindNode } from '../../shared/types/workspace';
-import { mindNodeFromDto, testCasesToMindNodes } from '../../shared/transforms/treeifyTransforms';
+import { mindNodeFromDto, statsFromServer, testCasesToMindNodes } from '../../shared/transforms/treeifyTransforms';
 import { useWorkspaceStore } from './workspaceStore';
-
-function statsFromServer(stats: { total: number; measured: number; passed: number; passRate: number }) {
-  return {
-    totalCases: stats.total,
-    testedCases: stats.measured,
-    passedCases: stats.passed,
-    failedCases: Math.max(0, stats.measured - stats.passed),
-    passRate: Math.round(stats.passRate * 10000) / 100
-  };
-}
 
 function buildNodeTree(projectName: string, cases: TestCaseDto[]): MindNode[] {
   const root: MindNode = {

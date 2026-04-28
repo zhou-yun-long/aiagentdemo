@@ -41,6 +41,16 @@ public final class AiStageAgents {
         return sb.toString();
     }
 
+    private static String appendFeedback(String prompt, String feedback) {
+        if (feedback == null || feedback.isBlank()) return prompt;
+        return prompt + "\n\n用户反馈：" + feedback;
+    }
+
+    private static JSONObject callAndParse(ChatClient chatClient, String prompt) {
+        String response = chatClient.prompt().user(prompt).call().content();
+        return JsonOutputParser.parseObject(response);
+    }
+
     // ──── E1: Requirements Analysis ────
 
     public static class E1Agent implements StageAgent {
@@ -69,13 +79,8 @@ public final class AiStageAgents {
                     只返回 JSON，不要添加其他文字。
                     """.formatted(context.input());
             String prompt = enrichPrompt(context, basePrompt);
-            JSONObject result = callAndParse(prompt);
+            JSONObject result = callAndParse(chatClient, prompt);
             return new StageResult("正在解析需求目标、用户动作和系统约束...", result);
-        }
-
-        private JSONObject callAndParse(String prompt) {
-            String response = chatClient.prompt().user(prompt).call().content();
-            return JsonOutputParser.parseObject(response);
         }
     }
 
@@ -100,59 +105,37 @@ public final class AiStageAgents {
                     JSONObject e1 = JsonOutputParser.parseObject(e1ResultJson);
                     basePrompt = buildPrompt(context.input(), e1 != null ? e1.toJSONString() : null);
                 } catch (Exception e) {
-                    basePrompt = buildPromptFromInput(context.input());
+                    basePrompt = buildPrompt(context.input(), null);
                 }
             } else {
-                basePrompt = buildPromptFromInput(context.input());
+                basePrompt = buildPrompt(context.input(), null);
             }
             basePrompt = appendFeedback(basePrompt, context.feedback());
             String prompt = enrichPrompt(context, basePrompt);
-            JSONObject result = callAndParse(prompt);
+            JSONObject result = callAndParse(chatClient, prompt);
             return new StageResult("正在拆分可测试对象...", result);
         }
 
         private String buildPrompt(String input, String e1Json) {
+            String priorSection = (e1Json != null && !e1Json.isBlank())
+                    ? "E1 分析结果：" + e1Json + "\n\n"
+                    : "";
             return """
-                    你是一个专业的测试设计师。请根据以下需求和 E1 阶段的分析结果，拆分可测试对象。
+                    你是一个专业的测试设计师。请根据以下需求%s拆分可测试对象。
 
                     需求：%s
 
-                    E1 分析结果：%s
-
-                    请以 JSON 数组格式返回可测试对象列表，每个对象包含：
+                    %s请以 JSON 数组格式返回可测试对象列表，每个对象包含：
                     - name: 可测试对象名称
                     - type: 类型(ui/function/flow/data)
                     - dimensions: 测试维度列表
                     - priority: 优先级(P0/P1/P2)
 
                     只返回 JSON 数组，不要添加其他文字。
-                    """.formatted(input, e1Json);
-        }
-
-        private String buildPromptFromInput(String input) {
-            return """
-                    你是一个专业的测试设计师。请根据以下需求，拆分可测试对象。
-
-                    需求：%s
-
-                    请以 JSON 数组格式返回可测试对象列表，每个对象包含：
-                    - name: 可测试对象名称
-                    - type: 类型(ui/function/flow/data)
-                    - dimensions: 测试维度列表
-                    - priority: 优先级(P0/P1/P2)
-
-                    只返回 JSON 数组，不要添加其他文字。
-                    """.formatted(input);
-        }
-
-        private String appendFeedback(String prompt, String feedback) {
-            if (feedback == null || feedback.isBlank()) return prompt;
-            return prompt + "\n\n用户反馈：" + feedback;
-        }
-
-        private JSONObject callAndParse(String prompt) {
-            String response = chatClient.prompt().user(prompt).call().content();
-            return JsonOutputParser.parseObject(response);
+                    """.formatted(
+                            e1Json != null ? "和 E1 阶段的分析结果，" : "，",
+                            input,
+                            priorSection);
         }
     }
 
@@ -176,9 +159,9 @@ public final class AiStageAgents {
             Object e2 = JsonOutputParser.safeParse(context.getResultJson("e2"));
             String basePrompt;
             if (e1 != null || e2 != null) {
-                basePrompt = buildPrompt(context.input(), stringify(e1), stringify(e2));
+                basePrompt = buildPrompt(context.input(), JsonOutputParser.stringify(e1), JsonOutputParser.stringify(e2));
             } else {
-                basePrompt = buildPromptFromInput(context.input());
+                basePrompt = buildPrompt(context.input(), null, null);
             }
             basePrompt = appendFeedback(basePrompt, context.feedback());
             String prompt = enrichPrompt(context, basePrompt);
@@ -187,16 +170,16 @@ public final class AiStageAgents {
         }
 
         private String buildPrompt(String input, String e1, String e2) {
+            boolean hasContext = e1 != null && !e1.equals("无");
+            String priorSection = hasContext
+                    ? "E1 分析结果：%s\n\nE2 拆分结果：%s\n\n".formatted(e1, e2)
+                    : "";
             return """
-                    你是一个专业的测试用例编写专家。请根据以下需求和前面的分析结果，生成测试用例。
+                    你是一个专业的测试用例编写专家。请根据以下需求%s生成测试用例。
 
                     需求：%s
 
-                    E1 分析结果：%s
-
-                    E2 拆分结果：%s
-
-                    请以 JSON 数组格式返回测试用例列表，每个用例包含：
+                    %s请以 JSON 数组格式返回测试用例列表，每个用例包含：
                     - title: 用例标题
                     - precondition: 前置条件
                     - steps: 执行步骤列表
@@ -207,32 +190,10 @@ public final class AiStageAgents {
                     - pathType: 路径类型(happy/error/boundary/alternative)
 
                     覆盖正常路径、异常路径和边界场景。只返回 JSON 数组，不要添加其他文字。
-                    """.formatted(input, e1, e2);
-        }
-
-        private String buildPromptFromInput(String input) {
-            return """
-                    你是一个专业的测试用例编写专家。请根据以下需求，生成测试用例。
-
-                    需求：%s
-
-                    请以 JSON 数组格式返回测试用例列表，每个用例包含：
-                    - title: 用例标题
-                    - precondition: 前置条件
-                    - steps: 执行步骤列表
-                    - expected: 预期结果
-                    - priority: 优先级(P0/P1/P2/P3)
-                    - tags: 标签列表
-                    - source: 来源("ai")
-                    - pathType: 路径类型(happy/error/boundary/alternative)
-
-                    覆盖正常路径、异常路径和边界场景。只返回 JSON 数组，不要添加其他文字。
-                    """.formatted(input);
-        }
-
-        private String appendFeedback(String prompt, String feedback) {
-            if (feedback == null || feedback.isBlank()) return prompt;
-            return prompt + "\n\n用户反馈：" + feedback;
+                    """.formatted(
+                            hasContext ? "和前面的分析结果，" : "，",
+                            input,
+                            priorSection);
         }
 
         private List<GeneratedCaseDto> callAndParseCases(String prompt) {
@@ -276,10 +237,6 @@ public final class AiStageAgents {
                 result.add(arr.getString(i));
             }
             return result;
-        }
-
-        private String stringify(Object value) {
-            return value == null ? "无" : JSON.toJSONString(value);
         }
     }
 

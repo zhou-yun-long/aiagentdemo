@@ -1,6 +1,16 @@
 import type { GeneratedCaseDraft, GenerateStage } from '../../types/generation';
 import type { GeneratedCaseDto, GenerateSsePayload, MindmapNodeDto, TestCaseDto, TestCaseRequest } from '../types/treeify';
-import type { ExecutionStatus, MindNode, Priority } from '../types/workspace';
+import type { ExecutionStatus, MindNode, Priority, WorkspaceStats } from '../types/workspace';
+
+export function statsFromServer(stats: { total: number; measured: number; passed: number; passRate: number }): WorkspaceStats {
+  return {
+    totalCases: stats.total,
+    testedCases: stats.measured,
+    passedCases: stats.passed,
+    failedCases: Math.max(0, stats.measured - stats.passed),
+    passRate: Math.round(stats.passRate * 10000) / 100
+  };
+}
 
 const lanes: MindNode['lane'][] = ['upper', 'middle', 'lower'];
 

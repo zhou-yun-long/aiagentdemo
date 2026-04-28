@@ -4,10 +4,13 @@ import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CreateKnowledgeRequ
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.KnowledgeDocumentDto;
 import com.zoujuexian.aiagentdemo.domain.entity.TreeifyKnowledgeDocument;
 import com.zoujuexian.aiagentdemo.domain.repository.TreeifyKnowledgeDocumentRepository;
+import com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class KnowledgeService {
@@ -59,21 +62,19 @@ public class KnowledgeService {
             return List.of();
         }
         // Extract search terms (split by spaces, commas)
-        String[] terms = keyword.split("[,\\s]+");
-        List<TreeifyKnowledgeDocument> allMatches = new java.util.ArrayList<>();
-        for (String term : terms) {
-            if (!term.isBlank()) {
-                allMatches.addAll(knowledgeRepo.searchByKeyword(projectId, term.trim()));
-            }
-        }
-        // Deduplicate and limit
-        return allMatches.stream()
-                .collect(java.util.stream.Collectors.toMap(
+        List<String> terms = Arrays.stream(keyword.split("[,\\s]+"))
+                .map(String::trim)
+                .filter(t -> !t.isBlank())
+                .toList();
+        if (terms.isEmpty()) return List.of();
+
+        // Search per term, deduplicate by ID
+        return terms.stream()
+                .flatMap(term -> knowledgeRepo.searchByKeyword(projectId, term).stream())
+                .collect(Collectors.toMap(
                         TreeifyKnowledgeDocument::getId,
                         d -> d,
-                        (a, b) -> a,
-                        java.util.LinkedHashMap::new
-                ))
+                        (a, b) -> a))
                 .values().stream()
                 .limit(maxResults)
                 .map(this::toDto)
@@ -92,17 +93,12 @@ public class KnowledgeService {
             String entry = "- [%s] %s: %s\n".formatted(
                     doc.source() != null ? doc.source() : "知识库",
                     doc.title(),
-                    truncate(doc.content(), 300)
+                    JsonOutputParser.truncate(doc.content(), 300)
             );
             if (sb.length() + entry.length() > charBudget) break;
             sb.append(entry);
         }
         return sb.toString();
-    }
-
-    private String truncate(String s, int maxLen) {
-        if (s == null) return "";
-        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
     }
 
     private KnowledgeDocumentDto toDto(TreeifyKnowledgeDocument e) {

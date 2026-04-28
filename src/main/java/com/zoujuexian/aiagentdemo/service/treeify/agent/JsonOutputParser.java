@@ -94,7 +94,15 @@ public final class JsonOutputParser {
         return cleaned.trim();
     }
 
-    private static String truncate(String s, int maxLen) {
+    /**
+     * Convert an object to JSON string, returning "无" for null.
+     */
+    public static String stringify(Object value) {
+        return value == null ? "无" : JSON.toJSONString(value);
+    }
+
+    public static String truncate(String s, int maxLen) {
+        if (s == null) return "";
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
     }
 }

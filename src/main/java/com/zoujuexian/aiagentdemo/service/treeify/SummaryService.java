@@ -45,8 +45,9 @@ public class SummaryService {
     public ProjectSummaryDto generate(Long projectId, String additionalContext) {
         persistence.findProject(projectId);
 
-        // Get existing current summary
-        String existingSummary = summaryRepo.findByProjectIdAndCurrentTrue(projectId)
+        // Get existing current summary and mark as not current (single query)
+        var existingCurrent = summaryRepo.findByProjectIdAndCurrentTrue(projectId);
+        String existingSummary = existingCurrent
                 .map(TreeifyProjectSummary::getContent)
                 .orElse("");
 
@@ -57,17 +58,13 @@ public class SummaryService {
         String newSummary = callLlmForSummary(existingSummary, casesContext, additionalContext);
 
         // Mark old current as not current
-        summaryRepo.findByProjectIdAndCurrentTrue(projectId)
-                .ifPresent(old -> {
-                    old.setCurrent(false);
-                    summaryRepo.save(old);
-                });
+        existingCurrent.ifPresent(old -> {
+            old.setCurrent(false);
+            summaryRepo.save(old);
+        });
 
-        // Determine next version
-        int nextVersion = summaryRepo.findAllByProjectIdOrderByVersionDesc(projectId).stream()
-                .mapToInt(TreeifyProjectSummary::getVersion)
-                .max()
-                .orElse(0) + 1;
+        // Determine next version using scalar query
+        int nextVersion = summaryRepo.findMaxVersion(projectId) + 1;
 
         // Save new summary
         TreeifyProjectSummary entity = new TreeifyProjectSummary(projectId, newSummary, nextVersion, true);
@@ -80,12 +77,10 @@ public class SummaryService {
     public ProjectSummaryDto rollback(Long projectId, int version) {
         persistence.findProject(projectId);
 
-        TreeifyProjectSummary target = summaryRepo.findAllByProjectIdOrderByVersionDesc(projectId).stream()
-                .filter(s -> s.getVersion() == version)
-                .findFirst()
+        TreeifyProjectSummary target = summaryRepo.findByProjectIdAndVersion(projectId, version)
                 .orElseThrow(() -> new IllegalArgumentException("Summary version not found: " + version));
 
-        // Mark all as not current
+        // Mark current as not current
         summaryRepo.findByProjectIdAndCurrentTrue(projectId)
                 .ifPresent(old -> {
                     old.setCurrent(false);
@@ -93,10 +88,7 @@ public class SummaryService {
                 });
 
         // Create a new version based on the target
-        int nextVersion = summaryRepo.findAllByProjectIdOrderByVersionDesc(projectId).stream()
-                .mapToInt(TreeifyProjectSummary::getVersion)
-                .max()
-                .orElse(0) + 1;
+        int nextVersion = summaryRepo.findMaxVersion(projectId) + 1;
 
         TreeifyProjectSummary rollback = new TreeifyProjectSummary(projectId, target.getContent(), nextVersion, true);
         summaryRepo.save(rollback);

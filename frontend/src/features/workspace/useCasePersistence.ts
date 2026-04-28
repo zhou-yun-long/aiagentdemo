@@ -6,19 +6,8 @@ import {
   updateCase,
   updateCaseExecutionStatus
 } from '../../shared/api/treeify';
-import { buildTestCaseRequest } from '../../shared/transforms/treeifyTransforms';
-import type { WorkspaceStats } from '../../shared/types/workspace';
+import { buildTestCaseRequest, statsFromServer } from '../../shared/transforms/treeifyTransforms';
 import { useWorkspaceStore } from './workspaceStore';
-
-function statsFromServer(stats: { total: number; measured: number; passed: number; passRate: number }): WorkspaceStats {
-  return {
-    totalCases: stats.total,
-    testedCases: stats.measured,
-    passedCases: stats.passed,
-    failedCases: Math.max(0, stats.measured - stats.passed),
-    passRate: Math.round(stats.passRate * 10000) / 100
-  };
-}
 
 async function refreshStats(projectId: number) {
   const stats = await getProjectCaseStats(projectId);
@@ -30,7 +19,6 @@ export function useCasePersistence() {
   const statusDirtyIds = useWorkspaceStore((state) => state.statusDirtyIds);
   const deletedCaseIds = useWorkspaceStore((state) => state.deletedCaseIds);
   const currentProjectId = useWorkspaceStore((state) => state.currentProjectId);
-  const nodes = useWorkspaceStore((state) => state.nodes);
 
   useEffect(() => {
     if (!deletedCaseIds.length || !currentProjectId) {
@@ -101,7 +89,7 @@ export function useCasePersistence() {
     }, 600);
 
     return () => window.clearTimeout(timer);
-  }, [statusDirtyIds, currentProjectId, nodes]);
+  }, [statusDirtyIds, currentProjectId]);
 
   useEffect(() => {
     if (!caseDirtyIds.length || !currentProjectId) {
@@ -144,5 +132,5 @@ export function useCasePersistence() {
     }, 900);
 
     return () => window.clearTimeout(timer);
-  }, [caseDirtyIds, currentProjectId, nodes]);
+  }, [caseDirtyIds, currentProjectId]);
 }

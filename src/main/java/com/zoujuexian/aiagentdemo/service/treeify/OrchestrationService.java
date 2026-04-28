@@ -8,6 +8,7 @@ import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseE
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GeneratedCaseDto;
+import com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser;
 import com.zoujuexian.aiagentdemo.service.treeify.agent.StageAgent;
 import com.zoujuexian.aiagentdemo.service.treeify.agent.StageContext;
 import com.zoujuexian.aiagentdemo.service.treeify.agent.StageResult;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Orchestrates generation stages (E1 → E2 → E3 → Critic) using StageAgent implementations.
@@ -78,19 +80,25 @@ public class OrchestrationService implements TreeifyGenerationService {
         String summary = "";
         String ragContext = "";
         if (projectId != null) {
-            try {
-                var summaryDto = summaryService.getCurrent(projectId);
-                if (summaryDto != null && summaryDto.content() != null) {
-                    summary = truncate(summaryDto.content(), 800);
+            CompletableFuture<String> summaryFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    var dto = summaryService.getCurrent(projectId);
+                    return (dto != null && dto.content() != null) ? JsonOutputParser.truncate(dto.content(), 800) : "";
+                } catch (Exception e) {
+                    log.debug("Failed to fetch project summary: {}", e.getMessage());
+                    return "";
                 }
-            } catch (Exception e) {
-                log.debug("Failed to fetch project summary: {}", e.getMessage());
-            }
-            try {
-                ragContext = knowledgeService.buildRagContext(projectId, input, 1500);
-            } catch (Exception e) {
-                log.debug("Failed to build RAG context: {}", e.getMessage());
-            }
+            });
+            CompletableFuture<String> ragFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return knowledgeService.buildRagContext(projectId, input, 1500);
+                } catch (Exception e) {
+                    log.debug("Failed to build RAG context: {}", e.getMessage());
+                    return "";
+                }
+            });
+            summary = summaryFuture.join();
+            ragContext = ragFuture.join();
         }
         return new StageContext(taskId, input, summary, ragContext);
     }
@@ -208,11 +216,6 @@ public class OrchestrationService implements TreeifyGenerationService {
             return report.score();
         }
         return 80;
-    }
-
-    private String truncate(String s, int maxLen) {
-        if (s == null) return "";
-        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
     }
 
     private GenerateSseEventDto event(String taskId, GenerateSseEventName type, String stage, long sequence, Object payload) {
