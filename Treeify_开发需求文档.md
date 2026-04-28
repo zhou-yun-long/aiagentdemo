@@ -1,4 +1,4 @@
-**Treeify**
+**speccase**
 
 AI 驱动测试用例生成平台
 
@@ -9,7 +9,7 @@ AI 驱动测试用例生成平台
 | 版本 | v1.0 |
 | 日期 | 2026-04 |
 | 状态 | 草稿 |
-| 技术栈 | Spring Boot · React · Spring AI · pgvector |
+| 技术栈 | Spring Boot · React · Spring AI · MySQL（P0）· pgvector（P1） |
 
 # 1. 项目总览
 
@@ -21,7 +21,7 @@ AI 驱动测试用例生成平台
 | 后端 | Spring Boot 3.x + Spring AI | RESTful API + AI 编排层 |
 | AI 框架 | Spring AI 1.x | Sub-agent / RAG / 流式输出原生支持 |
 | LLM | OpenAI GPT-4o（可切换） | 通过 Spring AI 统一接口，支持替换 |
-| 向量存储 | pgvector（PostgreSQL 扩展） | 与业务库合并，零额外运维 |
+| 向量存储 | pgvector（PostgreSQL 扩展，P1） | P0 不接入；P1 用于项目级 RAG 和历史用例语义召回 |
 | 业务数据库 | MySQL 8.0 | 用例、项目、用户数据 |
 | 缓存 | Redis 7 | 摘要缓存、会话状态 |
 | 外部集成 | MCP 协议 | Jira / 禅道 / CI 工具调用 |
@@ -34,13 +34,13 @@ AI 驱动测试用例生成平台
 | 项目管理 | ProjectList / ProjectDetail | ProjectService | 项目 CRUD、成员、摘要 |
 | 摘要 Agent | SummaryStatus（状态展示） | SummaryAgentService | 摘要生成/续写/校验 |
 | 三阶段引擎 | GeneratePanel（流式展示） | OrchestrationService | E1/E2/E3 Sub-agent 编排 |
-| RAG 知识库 | KnowledgeManager | KnowledgeService | 入库/检索/管理 |
+| RAG 知识库 | KnowledgeManager | KnowledgeService | P0 固定接口和 mock/关键词检索；P1 接 pgvector 入库/检索 |
 | 用例管理 | CaseList / CaseEditor | TestCaseService | CRUD、版本、导出 |
 | MCP 集成 | IntegrationSettings | McpToolService | 外部工具调用 |
 
 # 2. 数据库设计
 
-  📌  MySQL 存业务数据；PostgreSQL + pgvector 存向量数据。两库通过 project_id 关联。
+  📌  P0 只落 MySQL，优先固定 API 契约和生成主链路；P1 再接 PostgreSQL + pgvector 存向量数据，两库通过 project_id 关联。
 
 ## 2.1 MySQL 核心表
 
@@ -83,7 +83,7 @@ AI 驱动测试用例生成平台
 | source | VARCHAR(20) | DEFAULT 'ai' | 'ai' 或 'manual' |
 | stage_e1 | JSON |  | E1 阶段产出快照 |
 | stage_e2 | JSON |  | E2 阶段产出快照 |
-| vectorized | TINYINT | DEFAULT 0 | 是否已向量化入库 |
+| vectorized | TINYINT | DEFAULT 0 | 是否已向量化入库（P1 字段，P0 可保留默认值） |
 | created_by | BIGINT | FK → users.id | 创建人 |
 | created_at | DATETIME | NOT NULL | 创建时间 |
 | updated_at | DATETIME | NOT NULL | 更新时间 |
@@ -106,7 +106,7 @@ AI 驱动测试用例生成平台
 | created_at | DATETIME | NOT NULL |  |
 | completed_at | DATETIME |  | 完成时间 |
 
-## 2.2 pgvector 向量表
+## 2.2 pgvector 向量表（P1）
 
 ### 2.2.1 knowledge_chunks
 
@@ -149,7 +149,7 @@ CREATE INDEX idx_chunks_project ON knowledge_chunks(project_id, source_type);
 
 # 3. 后端 API 设计
 
-  📌  统一响应格式：{ code: 0, message: 'ok', data: {} }；错误时 code 非 0，message 为错误描述。
+  📌  统一响应格式：{ code: 0, message: 'ok', data: {}, requestId: 'req-xxx' }；API 请求和响应字段统一使用 camelCase，数据库字段继续使用 snake_case。
 
 ## 3.1 项目管理 API
 
@@ -176,11 +176,13 @@ CREATE INDEX idx_chunks_project ON knowledge_chunks(project_id, source_type);
 ```json
 {
   "code": 0,
+  "message": "ok",
   "data": {
     "id": 1, "name": "电商平台",
-    "owner_id": 100, "status": 1,
-    "created_at": "2026-04-25T10:00:00Z"
-  }
+    "ownerId": 100, "status": "active",
+    "createdAt": "2026-04-25T10:00:00+08:00"
+  },
+  "requestId": "req-20260425-abc123"
 }
 ```
 
@@ -196,14 +198,14 @@ CREATE INDEX idx_chunks_project ON knowledge_chunks(project_id, source_type);
 ### POST /api/v1/projects/{id}/documents 说明
 
 - Content-Type: multipart/form-data，字段名 file，支持 .pdf/.docx/.md
-- 上传后异步触发摘要 Agent，返回 202 Accepted + task_id
-- 前端轮询 GET /api/v1/tasks/{task_id} 获取摘要更新状态
+- 上传后异步触发摘要 Agent，返回 202 Accepted + taskId
+- 前端轮询 GET /api/v1/tasks/{taskId} 获取摘要更新状态
 
 ## 3.3 生成任务 API（核心）
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | /api/v1/projects/{id}/generate | 创建生成任务，返回 task_id |
+| POST | /api/v1/projects/{id}/generate | 创建生成任务，返回 taskId |
 | GET | /api/v1/generate/{taskId}/stream | SSE 流式订阅生成过程 |
 | POST | /api/v1/generate/{taskId}/confirm | 逐步模式：确认当前阶段继续 |
 | POST | /api/v1/generate/{taskId}/cancel | 取消生成任务 |
@@ -217,7 +219,7 @@ CREATE INDEX idx_chunks_project ON knowledge_chunks(project_id, source_type);
 {
   "mode": "auto",
   "input": "用户需要支持手机号登录，密码 6-20 位...",
-  "prd_document_id": 5
+  "prdDocumentId": 5
 }
 ```
 
@@ -226,25 +228,41 @@ CREATE INDEX idx_chunks_project ON knowledge_chunks(project_id, source_type);
 ```json
 {
   "code": 0,
+  "message": "ok",
   "data": {
-    "task_id": "a3f2c1d0-....",
-    "stream_url": "/api/v1/generate/a3f2c1d0-.../stream"
-  }
+    "taskId": "a3f2c1d0-....",
+    "streamUrl": "/api/v1/generate/a3f2c1d0-.../stream"
+  },
+  "requestId": "req-20260425-abc123"
 }
 ```
 
 ### GET /api/v1/generate/{taskId}/stream（SSE 事件格式）
 
-**SSE Event: e1_start**
+**SSE Event: stage_started**
 
-```
-data: { "event": "e1_start", "stage": "e1" }
+```json
+data: {
+  "event": "stage_started",
+  "taskId": "a3f2c1d0-....",
+  "stage": "e1",
+  "sequence": 1,
+  "timestamp": "2026-04-25T10:00:00+08:00",
+  "payload": { "stage": "e1" }
+}
 ```
 
-**SSE Event: e1_chunk（流式内容）**
+**SSE Event: stage_chunk（流式内容）**
 
-```
-data: { "event": "e1_chunk", "stage": "e1", "content": "抽取到功能点：用户登录..." }
+```json
+data: {
+  "event": "stage_chunk",
+  "taskId": "a3f2c1d0-....",
+  "stage": "e1",
+  "sequence": 2,
+  "timestamp": "2026-04-25T10:00:01+08:00",
+  "payload": { "content": "抽取到功能点：用户登录..." }
+}
 ```
 
 **SSE Event: stage_done（阶段完成，逐步模式需等待 confirm）**
@@ -252,9 +270,14 @@ data: { "event": "e1_chunk", "stage": "e1", "content": "抽取到功能点：用
 ```json
 data: {
   "event": "stage_done",
+  "taskId": "a3f2c1d0-....",
   "stage": "e1",
-  "result": { "features": [...], "constraints": [...] },
-  "need_confirm": true
+  "sequence": 3,
+  "timestamp": "2026-04-25T10:00:10+08:00",
+  "payload": {
+    "result": { "features": [...], "constraints": [...] },
+    "needConfirm": true
+  }
 }
 ```
 
@@ -263,8 +286,14 @@ data: {
 ```json
 data: {
   "event": "generation_complete",
-  "critic_score": 88,
-  "cases": [ { "title": "正确账号密码登录成功", "priority": 0, ... } ]
+  "taskId": "a3f2c1d0-....",
+  "stage": null,
+  "sequence": 12,
+  "timestamp": "2026-04-25T10:01:00+08:00",
+  "payload": {
+    "criticScore": 88,
+    "cases": [ { "title": "正确账号密码登录成功", "priority": "P0" } ]
+  }
 }
 ```
 
@@ -276,17 +305,17 @@ data: {
 | POST | /api/v1/projects/{id}/cases | 手动创建用例 |
 | PUT | /api/v1/cases/{caseId} | 更新用例 |
 | DELETE | /api/v1/cases/{caseId} | 删除用例 |
-| POST | /api/v1/cases/batch-confirm | 批量确认用例（触发向量化入库） |
+| POST | /api/v1/cases/batch-confirm | 批量确认用例（P0 保存 MySQL；P1 异步触发向量化入库） |
 | POST | /api/v1/cases/export | 导出用例（JSON/CSV/Excel） |
 
-## 3.5 RAG 知识库 API
+## 3.5 RAG 知识库 API（P1，P0 可先提供 mock/元信息）
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | POST | /api/v1/projects/{id}/knowledge | 上传知识文档（规范/术语表） |
 | GET | /api/v1/projects/{id}/knowledge | 获取知识库文档列表 |
 | DELETE | /api/v1/knowledge/{chunkId} | 删除知识片段 |
-| POST | /api/v1/projects/{id}/knowledge/search | 手动语义检索（调试用） |
+| POST | /api/v1/projects/{id}/knowledge/search | 手动检索调试（P0 关键词/mock；P1 语义检索） |
 
 # 4. 后端核心业务逻辑
 
@@ -296,7 +325,7 @@ data: {
 
 | 步骤 | 动作 | 边界条件 |
 | --- | --- | --- |
-| 1. 组装 Prompt | 读项目摘要 + RAG Top-5 + 用户输入 | 摘要不存在则跳过；RAG 无结果则不注入 |
+| 1. 组装 Prompt | 读项目摘要 + 历史用例上下文 + 用户输入 | P0 用 MySQL/关键词检索；P1 替换为 RAG Top-5 |
 | 2. 调用 E1 | 需求分析 Sub-agent 流式输出 | 超时 30s 则标记 failed |
 | 3. 逐步模式判断 | status=wait_confirm，挂起等待 | 超时 10min 自动取消任务 |
 | 4. 调用 E2 | 测试对象 Sub-agent | 输入为 E1 JSON 结构化产出 |
@@ -323,7 +352,7 @@ data: {
 | 字段 | 来源 | Token 预算 |
 | --- | --- | --- |
 | project_summary | MySQL project_summaries 表当前版本 | ≤ 800 token |
-| rag_context | pgvector 检索 Top-5 chunk 拼接 | ≤ 1500 token |
+| rag_context | P0：MySQL/关键词检索的历史用例；P1：pgvector 检索 Top-5 chunk 拼接 | ≤ 1500 token |
 | 用户输入 | 请求体 input 字段 + 关联 PRD 全文 | ≤ 4000 token |
 
 ## 4.2 SummaryAgentService（摘要 Agent）
@@ -344,7 +373,12 @@ data: {
 
 ## 4.3 KnowledgeService（RAG 检索）
 
-### 4.3.1 混合检索策略
+### 4.3.1 阶段策略
+
+- P0：不接 pgvector，先用 MySQL 读取最近确认用例 Top-20，并通过关键词过滤补充生成上下文；知识库接口可先返回 mock/文档元信息。
+- P1：接 PostgreSQL + pgvector，支持文档切片、embedding 入库、项目级语义召回和历史用例向量化。
+
+### 4.3.2 混合检索策略（P1）
 
 **混合检索 SQL（pgvector + 全文检索）**
 
@@ -359,7 +393,7 @@ ORDER BY score DESC
 LIMIT 5;
 ```
 
-### 4.3.2 入库规范
+### 4.3.3 入库规范（P1）
 
 - 历史用例入库：确认用例时异步触发，将 title+steps+expected 拼成自然语言后向量化
 - 文档入库：按标题层级切片（优先 Markdown ## 标题），每片 ≤ 500 token，重叠 50 token
@@ -406,12 +440,13 @@ const useGenerateStream = (taskId: string) => {
     es.onmessage = (e) => {
       const payload = JSON.parse(e.data);
       switch (payload.event) {
-        case 'e1_chunk': appendContent('e1', payload.content); break;
-        case 'stage_done': markStageDone(payload); break;
+        case 'stage_started': markStageStarted(payload.stage); break;
+        case 'stage_chunk': appendContent(payload.stage, payload.payload.content); break;
+        case 'stage_done': markStageDone(payload.stage, payload.payload); break;
         case 'generation_complete': setStatus('done'); es.close(); break;
-        case 'error': setStatus('failed'); es.close(); break;
       }
     };
+    es.onerror = () => { setStatus('failed'); es.close(); };
     return () => es.close();
   }, [taskId]);
   return { stages, status };
@@ -548,7 +583,7 @@ public record AgentContext(
 | 3001 | 422 | LLM 调用失败 | 重试一次，提示联系管理员 |
 | 3002 | 422 | Critic 重试次数超限 | 返回最后一次结果，标注质量警告 |
 | 3003 | 408 | 生成任务超时 | 提示网络检查或简化需求输入 |
-| 4001 | 500 | 向量化入库失败 | 异步重试，不影响用例保存 |
+| 4001 | 500 | 向量化入库失败（P1） | 异步重试，不影响用例保存 |
 
 # 8. 开发优先级与里程碑
 
@@ -557,7 +592,7 @@ public record AgentContext(
 | Sprint 1 | 第 1-2 周 | 项目创建/列表页、需求输入框、SSE 接入框架 | 项目 CRUD API、数据库初始化、Spring AI 接入 |
 | Sprint 2 | 第 3-4 周 | 三阶段流式展示、自动模式完整链路 | OrchestrationService E1/E2/E3 Sub-agent |
 | Sprint 3 | 第 5-6 周 | 逐步模式确认交互、用例预览编辑 | Critic Agent、重试机制、逐步模式 confirm API |
-| Sprint 4 | 第 7-8 周 | 摘要状态展示、知识库管理页 | 摘要 Agent、RAG 入库/检索、向量化异步任务 |
+| Sprint 4 | 第 7-8 周 | 摘要状态展示、知识库管理页 | 摘要 Agent、pgvector RAG 入库/检索、向量化异步任务 |
 | Sprint 5 | 第 9-10 周 | MCP 集成设置页、导出功能 | MCP 工具调用、Jira/禅道对接、导出接口 |
 
-  📌  P0（必须完成）：Sprint 1-3 全部任务。P1（重要）：Sprint 4。P2（迭代）：Sprint 5。
+  📌  P0（必须完成）：Sprint 1-3 全部任务，只固定契约和主链路，不接 pgvector。P1（重要）：Sprint 4 接 PostgreSQL + pgvector。P2（迭代）：Sprint 5。
