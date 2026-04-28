@@ -13,6 +13,8 @@ type WorkspaceState = {
   theme: ThemeMode;
   assistantOpen: boolean;
   outlineOpen: boolean;
+  summaryOpen: boolean;
+  knowledgeOpen: boolean;
   zoom: number;
   lastSnapshotAt?: string;
   currentProjectId: number | null;
@@ -27,6 +29,10 @@ type WorkspaceState = {
   toggleAssistant: () => void;
   closeAssistant: () => void;
   toggleOutline: () => void;
+  toggleSummary: () => void;
+  closeSummary: () => void;
+  toggleKnowledge: () => void;
+  closeKnowledge: () => void;
   updateNode: (id: string, patch: Partial<MindNode>) => void;
   addChildNode: () => void;
   addSiblingNode: () => void;
@@ -204,6 +210,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   theme: 'light',
   assistantOpen: true,
   outlineOpen: true,
+  summaryOpen: false,
+  knowledgeOpen: false,
   zoom: 1,
   currentProjectId: null,
   pageStatus: 'loading',
@@ -217,6 +225,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   toggleAssistant: () => set((state) => ({ assistantOpen: !state.assistantOpen })),
   closeAssistant: () => set({ assistantOpen: false }),
   toggleOutline: () => set((state) => ({ outlineOpen: !state.outlineOpen })),
+  toggleSummary: () => set((state) => ({ summaryOpen: !state.summaryOpen })),
+  closeSummary: () => set({ summaryOpen: false }),
+  toggleKnowledge: () => set((state) => ({ knowledgeOpen: !state.knowledgeOpen })),
+  closeKnowledge: () => set({ knowledgeOpen: false }),
   updateNode: (id, patch) =>
     set((state) => {
       const dirtyCaseIds = getDirtyCaseIdsForNode(state.nodes, id);

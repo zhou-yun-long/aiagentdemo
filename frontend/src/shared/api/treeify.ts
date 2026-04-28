@@ -4,8 +4,10 @@ import type {
   ConfirmGenerateTaskRequest,
   CreateGenerateTaskRequest,
   GenerateTaskDto,
+  KnowledgeDocumentDto,
   MindmapNodeDto,
   ProjectDto,
+  ProjectSummaryDto,
   TestCaseRequest,
   TestCaseDto,
   TreeifyApiMode
@@ -102,4 +104,50 @@ export function saveMindmap(projectId: number, nodes: MindmapNodeDto[]) {
 
 export function getMindmap(projectId: number) {
   return request<MindmapNodeDto[]>(`/api/v1/projects/${projectId}/mindmap`);
+}
+
+export function getProjectSummary(projectId: number) {
+  return request<ProjectSummaryDto>(`/api/v1/projects/${projectId}/summary`);
+}
+
+export function getSummaryHistory(projectId: number) {
+  return request<ProjectSummaryDto[]>(`/api/v1/projects/${projectId}/summary/history`);
+}
+
+export function generateSummary(projectId: number, context?: string) {
+  const qs = context ? `?context=${encodeURIComponent(context)}` : '';
+  return request<ProjectSummaryDto>(`/api/v1/projects/${projectId}/summary/generate${qs}`, {
+    method: 'POST'
+  });
+}
+
+export function rollbackSummary(projectId: number, version: number) {
+  return request<ProjectSummaryDto>(`/api/v1/projects/${projectId}/summary/rollback/${version}`, {
+    method: 'POST'
+  });
+}
+
+export function addKnowledgeDocument(projectId: number, body: { title: string; content: string; source: string }) {
+  return request<KnowledgeDocumentDto>(`/api/v1/projects/${projectId}/knowledge`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+}
+
+export function listKnowledgeDocuments(projectId: number) {
+  return request<KnowledgeDocumentDto[]>(`/api/v1/projects/${projectId}/knowledge`);
+}
+
+export function deleteKnowledgeDocument(docId: number) {
+  return request<{ deleted: boolean }>(`/api/v1/knowledge/${docId}`, {
+    method: 'DELETE'
+  });
+}
+
+export function searchKnowledge(projectId: number, keyword: string, limit?: number) {
+  const params = new URLSearchParams({ keyword });
+  if (limit !== undefined) params.set('limit', String(limit));
+  return request<KnowledgeDocumentDto[]>(`/api/v1/projects/${projectId}/knowledge/search?${params}`, {
+    method: 'POST'
+  });
 }

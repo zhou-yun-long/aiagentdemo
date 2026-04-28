@@ -143,3 +143,21 @@ export type MindmapNodeDto = {
 export type SaveMindmapRequest = {
   nodes: MindmapNodeDto[];
 };
+
+export type ProjectSummaryDto = {
+  id: number;
+  projectId: number;
+  content: string;
+  version: number;
+  current: boolean;
+  createdAt: string;
+};
+
+export type KnowledgeDocumentDto = {
+  id: number;
+  projectId: number;
+  title: string;
+  content: string;
+  source: string;
+  createdAt: string;
+};

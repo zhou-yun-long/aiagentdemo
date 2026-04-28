@@ -331,17 +331,21 @@ public class ConfirmGenerateTaskRequest {
 - `KnowledgeService`：文档 CRUD + 关键词检索 + RAG 上下文构建
 - `SummaryController` / `KnowledgeController`：8 个 API 端点
 - `OrchestrationService` 自动注入项目摘要和 RAG 上下文到各阶段 prompt
-- 未实现：PDF/DOCX 解析、pgvector 语义检索、前端管理面板
+- 前端 SummaryPanel + KnowledgePanel 已实现（Toolbar 入口、面板开关、API 对接）
+- 未实现：PDF/DOCX 解析、pgvector 语义检索
 
 **涉及前端文件**：
 
 | 文件 | 改动 |
 | --- | --- |
-| 新增 `frontend/src/features/summaries/` | 摘要状态展示、历史、回滚 |
-| 新增 `frontend/src/features/knowledge/` | 知识库管理页 |
-| `frontend/src/components/Toolbar.tsx` | 添加摘要入口 |
-| `frontend/src/shared/api/treeify.ts` | 新增摘要和知识库 API 调用 |
-| `frontend/src/shared/types/treeify.ts` | 新增 ProjectSummary、KnowledgeDocument 类型 |
+| 新增 `frontend/src/components/SummaryPanel.tsx` | 摘要展示、生成、历史版本、回滚 |
+| 新增 `frontend/src/components/KnowledgePanel.tsx` | 知识库搜索、文档列表、添加/删除文档 |
+| `frontend/src/components/Toolbar.tsx` | 添加摘要和知识库切换按钮（FileText/BookOpen 图标） |
+| `frontend/src/features/workspace/workspaceStore.ts` | 新增 summaryOpen/knowledgeOpen 状态和 toggle/close actions |
+| `frontend/src/shared/api/treeify.ts` | 新增 8 个摘要和知识库 API 调用 |
+| `frontend/src/shared/types/treeify.ts` | 新增 ProjectSummaryDto、KnowledgeDocumentDto 类型 |
+| `frontend/src/styles/app.css` | 新增 summary-panel、knowledge-panel 及内部元素样式 |
+| `frontend/src/App.tsx` | 接入 SummaryPanel 和 KnowledgePanel，传递 store 状态 |
 
 **涉及后端文件**：
 

@@ -1,9 +1,11 @@
 import {
   ArrowDown,
   ArrowUp,
+  BookOpen,
   Bot,
   ChevronDown,
   Download,
+  FileText,
   Fullscreen,
   Image,
   Link,
@@ -31,6 +33,10 @@ type ToolbarProps = {
   onToggleTheme: () => void;
   assistantOpen: boolean;
   onToggleAssistant: () => void;
+  summaryOpen: boolean;
+  onToggleSummary: () => void;
+  knowledgeOpen: boolean;
+  onToggleKnowledge: () => void;
   onAddChild: () => void;
   onAddSibling: () => void;
   onDelete: () => void;
@@ -52,6 +58,10 @@ export function Toolbar({
   onToggleTheme,
   assistantOpen,
   onToggleAssistant,
+  summaryOpen,
+  onToggleSummary,
+  knowledgeOpen,
+  onToggleKnowledge,
   onAddChild,
   onAddSibling,
   onDelete,
@@ -91,6 +101,14 @@ export function Toolbar({
           <button className="ghost" onClick={onToggleAssistant}>
             <Bot size={15} />
             {assistantOpen ? '关闭AI助手' : '打开AI助手'}
+          </button>
+          <button className="ghost" onClick={onToggleSummary}>
+            <FileText size={15} />
+            {summaryOpen ? '关闭摘要' : '项目摘要'}
+          </button>
+          <button className="ghost" onClick={onToggleKnowledge}>
+            <BookOpen size={15} />
+            {knowledgeOpen ? '关闭知识库' : '知识库'}
           </button>
           <button className="ghost" onClick={onExportCases}>
             <Download size={15} />

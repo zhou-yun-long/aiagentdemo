@@ -1,10 +1,13 @@
 import { useMemo } from 'react';
 import { AiAssistantPanel } from './components/AiAssistantPanel';
+import { KnowledgePanel } from './components/KnowledgePanel';
 import { MindMapCanvas } from './components/MindMapCanvas';
 import { OutlinePanel } from './components/OutlinePanel';
 import { SelectionBar } from './components/SelectionBar';
+import { SummaryPanel } from './components/SummaryPanel';
 import { Toolbar } from './components/Toolbar';
 import { getDescendantIds, getWorkspaceStats, useWorkspaceStore } from './features/workspace/workspaceStore';
+import { getDefaultProjectId } from './shared/api/treeify';
 import { useCasePersistence } from './features/workspace/useCasePersistence';
 import { useMindmapSave } from './features/workspace/useMindmapSave';
 import { useProjectLoader } from './features/workspace/useProjectLoader';
@@ -42,6 +45,8 @@ export default function App() {
   const selectedId = useWorkspaceStore((state) => state.selectedId);
   const assistantOpen = useWorkspaceStore((state) => state.assistantOpen);
   const outlineOpen = useWorkspaceStore((state) => state.outlineOpen);
+  const summaryOpen = useWorkspaceStore((state) => state.summaryOpen);
+  const knowledgeOpen = useWorkspaceStore((state) => state.knowledgeOpen);
   const zoom = useWorkspaceStore((state) => state.zoom);
   const lastSnapshotAt = useWorkspaceStore((state) => state.lastSnapshotAt);
   const selectNode = useWorkspaceStore((state) => state.selectNode);
@@ -49,6 +54,10 @@ export default function App() {
   const toggleAssistant = useWorkspaceStore((state) => state.toggleAssistant);
   const closeAssistant = useWorkspaceStore((state) => state.closeAssistant);
   const toggleOutline = useWorkspaceStore((state) => state.toggleOutline);
+  const toggleSummary = useWorkspaceStore((state) => state.toggleSummary);
+  const closeSummary = useWorkspaceStore((state) => state.closeSummary);
+  const toggleKnowledge = useWorkspaceStore((state) => state.toggleKnowledge);
+  const closeKnowledge = useWorkspaceStore((state) => state.closeKnowledge);
   const updateNode = useWorkspaceStore((state) => state.updateNode);
   const addChildNode = useWorkspaceStore((state) => state.addChildNode);
   const addSiblingNode = useWorkspaceStore((state) => state.addSiblingNode);
@@ -59,6 +68,7 @@ export default function App() {
   const clearExecutionRecords = useWorkspaceStore((state) => state.clearExecutionRecords);
   const snapshotCurrentResult = useWorkspaceStore((state) => state.snapshotCurrentResult);
   const dirty = useWorkspaceStore((state) => state.dirty);
+  const currentProjectId = useWorkspaceStore((state) => state.currentProjectId);
   const appendAiRows = useWorkspaceStore((state) => state.appendAiRows);
 
   const { pageStatus, pageError } = useProjectLoader();
@@ -90,6 +100,10 @@ export default function App() {
         theme={theme}
         assistantOpen={assistantOpen}
         onToggleAssistant={toggleAssistant}
+        summaryOpen={summaryOpen}
+        onToggleSummary={toggleSummary}
+        knowledgeOpen={knowledgeOpen}
+        onToggleKnowledge={toggleKnowledge}
         onToggleTheme={toggleTheme}
         onAddChild={addChildNode}
         onAddSibling={addSiblingNode}
@@ -102,7 +116,7 @@ export default function App() {
         saveResult={saveResult}
         onSave={save}
       />
-      <div className={`workspace ${assistantOpen ? '' : 'assistant-closed'} ${outlineOpen ? '' : 'outline-hidden'}`}>
+      <div className={`workspace ${assistantOpen ? '' : 'assistant-closed'} ${outlineOpen ? '' : 'outline-hidden'} ${summaryOpen ? 'summary-open' : ''} ${knowledgeOpen ? 'knowledge-open' : ''}`}>
         {outlineOpen && <OutlinePanel nodes={nodes} selectedId={selectedId} onSelect={selectNode} onClose={toggleOutline} />}
         <section className="work-area">
           {pageStatus === 'loading' ? (
@@ -147,6 +161,16 @@ export default function App() {
           selectedNode={selectedNode}
           onClose={closeAssistant}
           onImportRows={appendAiRows}
+        />
+        <SummaryPanel
+          open={summaryOpen}
+          projectId={currentProjectId ?? getDefaultProjectId()}
+          onClose={closeSummary}
+        />
+        <KnowledgePanel
+          open={knowledgeOpen}
+          projectId={currentProjectId ?? getDefaultProjectId()}
+          onClose={closeKnowledge}
         />
       </div>
     </div>
