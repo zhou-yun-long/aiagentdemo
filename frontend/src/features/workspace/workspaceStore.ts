@@ -8,6 +8,7 @@ export type PageStatus = 'loading' | 'ready' | 'empty' | 'error';
 
 type WorkspaceState = {
   nodes: MindNode[];
+  serverStats: WorkspaceStats | null;
   selectedId: string;
   theme: ThemeMode;
   assistantOpen: boolean;
@@ -18,6 +19,9 @@ type WorkspaceState = {
   pageStatus: PageStatus;
   pageError: string | null;
   dirty: boolean;
+  caseDirtyIds: string[];
+  statusDirtyIds: string[];
+  deletedCaseIds: string[];
   selectNode: (id: string) => void;
   toggleTheme: () => void;
   toggleAssistant: () => void;
@@ -34,8 +38,12 @@ type WorkspaceState = {
   snapshotCurrentResult: () => void;
   appendAiRows: (rows: string[][]) => void;
   setNodes: (nodes: MindNode[]) => void;
+  setServerStats: (stats: WorkspaceStats | null) => void;
   setPageStatus: (status: PageStatus, error?: string) => void;
   markClean: () => void;
+  markCasesClean: (caseIds: string[]) => void;
+  markStatusCasesClean: (caseIds: string[]) => void;
+  markDeletedCasesClean: (caseIds: string[]) => void;
 };
 
 function cloneNodes(nodes: MindNode[]) {
@@ -61,6 +69,21 @@ function getDescendantIds(nodes: MindNode[], id: string) {
   }
 
   return ids;
+}
+
+function appendUnique(items: string[], additions: string[]) {
+  return Array.from(new Set([...items, ...additions]));
+}
+
+function getDirtyCaseIdsForNode(nodes: MindNode[], nodeId: string) {
+  const node = nodes.find((item) => item.id === nodeId);
+  return node?.caseId ? [node.caseId] : [];
+}
+
+function getDeletedCaseIds(nodes: MindNode[], deleteIds: Set<string>) {
+  return nodes
+    .filter((node) => deleteIds.has(node.id) && node.kind === 'case' && node.caseId)
+    .map((node) => node.caseId as string);
 }
 
 function getNextOrder(nodes: MindNode[], parentId: string | undefined, lane: Lane, depth: number) {
@@ -176,6 +199,7 @@ function getCaseParent(nodes: MindNode[], selectedId: string) {
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   nodes: cloneNodes(initialMindNodes),
+  serverStats: null,
   selectedId: 'success-steps',
   theme: 'light',
   assistantOpen: true,
@@ -185,24 +209,42 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   pageStatus: 'loading',
   pageError: null,
   dirty: false,
+  caseDirtyIds: [],
+  statusDirtyIds: [],
+  deletedCaseIds: [],
   selectNode: (id) => set({ selectedId: id }),
   toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
   toggleAssistant: () => set((state) => ({ assistantOpen: !state.assistantOpen })),
   closeAssistant: () => set({ assistantOpen: false }),
   toggleOutline: () => set((state) => ({ outlineOpen: !state.outlineOpen })),
   updateNode: (id, patch) =>
-    set((state) => ({
-      nodes: state.nodes.map((node) =>
-        node.id === id
-          ? {
-              ...node,
-              ...patch,
-              version: (node.version || 1) + 1
-            }
-          : node
-      ),
-      dirty: true
-    })),
+    set((state) => {
+      const dirtyCaseIds = getDirtyCaseIdsForNode(state.nodes, id);
+      const patchKeys = Object.keys(patch);
+      const statusOnly = patchKeys.length === 1 && patchKeys[0] === 'executionStatus';
+      return {
+        nodes: state.nodes.map((node) =>
+          node.id === id
+            ? {
+                ...node,
+                ...patch,
+                status:
+                  patch.executionStatus === 'passed'
+                    ? 'pass'
+                    : patch.executionStatus === 'failed'
+                      ? 'fail'
+                      : patch.executionStatus
+                        ? 'warn'
+                        : node.status,
+                version: (node.version || 1) + 1
+              }
+            : node
+        ),
+        dirty: true,
+        caseDirtyIds: statusOnly ? state.caseDirtyIds : appendUnique(state.caseDirtyIds, dirtyCaseIds),
+        statusDirtyIds: statusOnly ? appendUnique(state.statusDirtyIds, dirtyCaseIds) : state.statusDirtyIds
+      };
+    }),
   addChildNode: () =>
     set((state) => {
       const parent = state.nodes.find((node) => node.id === state.selectedId);
@@ -255,7 +297,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       return {
         nodes: state.nodes.filter((node) => !deleteIds.has(node.id)),
         selectedId: selected.parentId || 'root',
-        dirty: true
+        dirty: true,
+        deletedCaseIds: appendUnique(state.deletedCaseIds, getDeletedCaseIds(state.nodes, deleteIds))
       };
     }),
   moveSelectedNode: (direction) =>
@@ -309,7 +352,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
             }
           : node
       ),
-      dirty: true
+      dirty: true,
+      statusDirtyIds: appendUnique(
+        state.statusDirtyIds,
+        state.nodes.filter((node) => node.kind === 'case' && node.caseId).map((node) => node.caseId as string)
+      )
     })),
   snapshotCurrentResult: () =>
     set({
@@ -399,7 +446,20 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         dirty: true
       };
     }),
-  setNodes: (nodes) => set({ nodes: cloneNodes(nodes), dirty: false }),
+  setNodes: (nodes) => set({ nodes: cloneNodes(nodes), dirty: false, caseDirtyIds: [], statusDirtyIds: [], deletedCaseIds: [] }),
+  setServerStats: (stats) => set({ serverStats: stats }),
   setPageStatus: (status, error) => set({ pageStatus: status, pageError: error ?? null }),
-  markClean: () => set({ dirty: false })
+  markClean: () => set({ dirty: false }),
+  markCasesClean: (caseIds) =>
+    set((state) => ({
+      caseDirtyIds: state.caseDirtyIds.filter((caseId) => !caseIds.includes(caseId))
+    })),
+  markStatusCasesClean: (caseIds) =>
+    set((state) => ({
+      statusDirtyIds: state.statusDirtyIds.filter((caseId) => !caseIds.includes(caseId))
+    })),
+  markDeletedCasesClean: (caseIds) =>
+    set((state) => ({
+      deletedCaseIds: state.deletedCaseIds.filter((caseId) => !caseIds.includes(caseId))
+    }))
 }));

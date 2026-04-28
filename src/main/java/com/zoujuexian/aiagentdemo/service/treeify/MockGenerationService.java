@@ -24,7 +24,8 @@ import java.util.Map;
 public class MockGenerationService implements TreeifyGenerationService {
 
     @Override
-    public List<GenerateSseEventDto> buildEvents(String taskId, String mode, String input, String currentStage) {
+    public List<GenerateSseEventDto> buildEvents(String taskId, String mode, String input, String currentStage,
+                                                  String e1Result, String e2Result, String feedback) {
         MockScenario scenario = resolveScenario(input);
         if (!"step".equals(mode)) {
             return buildAutoGenerateEvents(taskId, scenario);

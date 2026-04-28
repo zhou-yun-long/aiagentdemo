@@ -10,6 +10,11 @@ public record GenerateTaskDto(
         String currentStage,
         String streamUrl,
         Integer criticScore,
+        String selectedNodeId,
+        java.util.List<Long> contextCaseIds,
+        String e1Result,
+        String e2Result,
+        String feedback,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         LocalDateTime completedAt

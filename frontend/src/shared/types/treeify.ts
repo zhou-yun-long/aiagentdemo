@@ -33,6 +33,11 @@ export type GenerateTaskDto = {
   currentStage: GenerateStage | null;
   streamUrl: string;
   criticScore?: number;
+  selectedNodeId?: string;
+  contextCaseIds?: number[];
+  e1Result?: string;
+  e2Result?: string;
+  feedback?: string;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
@@ -65,6 +70,20 @@ export type TestCaseDto = {
   version: number;
   createdAt: string;
   updatedAt: string;
+};
+
+export type TestCaseRequest = {
+  parentId?: number | null;
+  title: string;
+  precondition: string;
+  steps: string[];
+  expected: string;
+  priority: Priority;
+  tags: string[];
+  source: string;
+  executionStatus: ExecutionStatus;
+  layout?: Record<string, unknown>;
+  version?: number;
 };
 
 export type CaseStatsDto = {

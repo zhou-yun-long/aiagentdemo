@@ -22,6 +22,7 @@ import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.SaveMindmapRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseRequest;
+import com.alibaba.fastjson.JSON;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -173,7 +174,7 @@ public class MockTreeifyService {
     public GenerateTaskDto createGenerateTask(Long projectId, CreateGenerateTaskRequest request) {
         GenerateTaskDto task = persistence.createGenerateTask(projectId, request);
         tasks.put(task.taskId(), task);
-        taskInputs.put(task.taskId(), request != null ? defaultText(request.input(), "") : "");
+        taskInputs.put(task.taskId(), persistence.getTaskInput(task.taskId()));
         return task;
     }
 
@@ -200,6 +201,10 @@ public class MockTreeifyService {
 
     public GenerateTaskDto confirmTask(String taskId, ConfirmGenerateTaskRequest request) {
         GenerateTaskDto current = getTask(taskId);
+        if (request != null && request.feedback() != null && !request.feedback().isBlank()) {
+            persistence.saveFeedback(taskId, request.feedback());
+            current = getTask(taskId);
+        }
         String nextStatus = "e1".equals(request == null ? null : request.stage()) ? "e2" : "e3";
         return updateTask(current, nextStatus, nextStatus, current.criticScore(), null);
     }
@@ -276,6 +281,11 @@ public class MockTreeifyService {
         return switch (event.event()) {
             case STAGE_STARTED -> updateTask(current, event.stage(), event.stage(), current.criticScore(), null);
             case STAGE_DONE -> {
+                // Persist stage result if present
+                String resultJson = extractResultPayload(event);
+                if (resultJson != null && event.stage() != null) {
+                    persistence.saveStageResult(event.taskId(), event.stage(), resultJson);
+                }
                 if (isWaitingForConfirmation(event)) {
                     yield updateTask(current, "wait_confirm", event.stage(), current.criticScore(), null);
                 }
@@ -301,6 +311,16 @@ public class MockTreeifyService {
             }
         }
         return fallback != null ? fallback : 0;
+    }
+
+    private String extractResultPayload(GenerateSseEventDto event) {
+        if (event.payload() instanceof Map<?, ?> payload) {
+            Object result = payload.get("result");
+            if (result != null) {
+                return JSON.toJSONString(result);
+            }
+        }
+        return null;
     }
 
     // ──── Scenario resolution (in-memory, stays as-is) ────
@@ -396,6 +416,11 @@ public class MockTreeifyService {
                 currentStage,
                 current.streamUrl(),
                 criticScore,
+                current.selectedNodeId(),
+                current.contextCaseIds(),
+                current.e1Result(),
+                current.e2Result(),
+                current.feedback(),
                 current.createdAt(),
                 LocalDateTime.now(),
                 completedAt

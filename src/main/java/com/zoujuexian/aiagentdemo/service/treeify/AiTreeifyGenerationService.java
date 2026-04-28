@@ -46,29 +46,31 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
     }
 
     @Override
-    public List<GenerateSseEventDto> buildEvents(String taskId, String mode, String input, String currentStage) {
+    public List<GenerateSseEventDto> buildEvents(String taskId, String mode, String input, String currentStage,
+                                                  String e1Result, String e2Result, String feedback) {
         if (!llmAvailable) {
             log.debug("LLM not available, falling back to mock generation for task {}", taskId);
-            return fallback.buildEvents(taskId, mode, input, currentStage);
+            return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback);
         }
         try {
-            return buildAiEvents(taskId, mode, input, currentStage);
+            return buildAiEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback);
         } catch (Exception e) {
             log.warn("AI generation failed for task {}, falling back to mock: {}", taskId, e.getMessage());
-            return fallback.buildEvents(taskId, mode, input, currentStage);
+            return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback);
         }
     }
 
     // ──── AI-powered generation ────
 
-    private List<GenerateSseEventDto> buildAiEvents(String taskId, String mode, String input, String currentStage) {
+    private List<GenerateSseEventDto> buildAiEvents(String taskId, String mode, String input, String currentStage,
+                                                     String e1Result, String e2Result, String feedback) {
         if (!"step".equals(mode)) {
             return buildAiAutoEvents(taskId, input);
         }
         String stage = currentStage != null ? currentStage : "e1";
         return switch (stage) {
-            case "e2" -> buildAiStepE2Events(taskId, input);
-            case "e3", "critic" -> buildAiFinalEvents(taskId, input);
+            case "e2" -> buildAiStepE2Events(taskId, input, e1Result, feedback);
+            case "e3", "critic" -> buildAiFinalEvents(taskId, input, e1Result, e2Result, feedback);
             default -> buildAiStepE1Events(taskId, input);
         };
     }
@@ -128,10 +130,21 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
         return events;
     }
 
-    private List<GenerateSseEventDto> buildAiStepE2Events(String taskId, String input) {
+    private List<GenerateSseEventDto> buildAiStepE2Events(String taskId, String input, String e1Result, String feedback) {
         long seq = 4;
         List<GenerateSseEventDto> events = new ArrayList<>();
-        JSONObject e2Result = callLlm(e2PromptFromInput(input));
+        JSONObject e2Result;
+        if (e1Result != null && !e1Result.isBlank()) {
+            try {
+                JSONObject e1Json = JSON.parseObject(e1Result);
+                e2Result = callLlm(buildE2PromptWithFeedback(e2Prompt(input, e1Json), feedback));
+            } catch (Exception e) {
+                log.warn("Failed to parse stored e1Result, falling back to input-only prompt: {}", e.getMessage());
+                e2Result = callLlm(buildE2PromptWithFeedback(e2PromptFromInput(input), feedback));
+            }
+        } else {
+            e2Result = callLlm(buildE2PromptWithFeedback(e2PromptFromInput(input), feedback));
+        }
         events.add(event(taskId, STAGE_STARTED, "e2", seq++, Map.of("stage", "e2")));
         events.add(event(taskId, STAGE_CHUNK, "e2", seq++, Map.of("content", "正在拆分可测试对象...")));
         events.add(event(taskId, STAGE_DONE, "e2", seq++, Map.of(
@@ -141,10 +154,19 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
         return events;
     }
 
-    private List<GenerateSseEventDto> buildAiFinalEvents(String taskId, String input) {
+    private List<GenerateSseEventDto> buildAiFinalEvents(String taskId, String input, String e1Result, String e2Result, String feedback) {
         long seq = 7;
         List<GenerateSseEventDto> events = new ArrayList<>();
-        List<GeneratedCaseDto> cases = callLlmForCasesFromInput(input);
+        List<GeneratedCaseDto> cases;
+        Object e1Json = safeParseJson(e1Result);
+        Object e2Json = safeParseJson(e2Result);
+        if (e1Json != null || e2Json != null) {
+            String prompt = buildE3PromptWithFeedback(e3Prompt(input, e1Json, e2Json), feedback);
+            cases = callLlmForCasesWithPrompt(prompt);
+        } else {
+            String prompt = buildE3PromptWithFeedback(e3PromptFromInput(input), feedback);
+            cases = callLlmForCasesWithPrompt(prompt);
+        }
         int criticScore = callLlmForCriticScore(input, cases);
         events.add(event(taskId, STAGE_STARTED, "e3", seq++, Map.of("stage", "e3")));
         events.add(event(taskId, STAGE_CHUNK, "e3", seq++, Map.of("content", "正在生成测试用例...")));
@@ -210,15 +232,15 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
                 """;
     }
 
-    private String e3Prompt(String input, JSONObject e1Result, JSONObject e2Result) {
+    private String e3Prompt(String input, Object e1Result, Object e2Result) {
         return """
                 你是一个专业的测试用例编写专家。请根据以下需求和前面的分析结果，生成测试用例。
 
                 需求：""" + input + """
 
-                E1 分析结果：""" + (e1Result != null ? e1Result.toJSONString() : "无") + """
+                E1 分析结果：""" + stringifyJson(e1Result) + """
 
-                E2 拆分结果：""" + (e2Result != null ? e2Result.toJSONString() : "无") + """
+                E2 拆分结果：""" + stringifyJson(e2Result) + """
 
                 请以 JSON 数组格式返回测试用例列表，每个用例包含：
                 - title: 用例标题
@@ -393,6 +415,47 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
             result.add(arr.getString(i));
         }
         return result;
+    }
+
+    // ──── Prompt helpers ────
+
+    private String buildE2PromptWithFeedback(String basePrompt, String feedback) {
+        if (feedback == null || feedback.isBlank()) {
+            return basePrompt;
+        }
+        return basePrompt + "\n\n用户反馈：" + feedback;
+    }
+
+    private String buildE3PromptWithFeedback(String basePrompt, String feedback) {
+        if (feedback == null || feedback.isBlank()) {
+            return basePrompt;
+        }
+        return basePrompt + "\n\n用户反馈：" + feedback;
+    }
+
+    private Object safeParseJson(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return JSON.parse(json);
+        } catch (Exception e) {
+            log.debug("Failed to parse stored JSON: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private String stringifyJson(Object value) {
+        return value == null ? "无" : JSON.toJSONString(value);
+    }
+
+    private List<GeneratedCaseDto> callLlmForCasesWithPrompt(String prompt) {
+        String response = chatClient.prompt()
+                .user(prompt)
+                .call()
+                .content();
+        log.debug("LLM E3 response: {}", response);
+        return parseCasesResponse(response);
     }
 
     // ──── Helper ────

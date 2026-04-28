@@ -52,7 +52,9 @@ public class GenerateController {
     public Flux<ServerSentEvent<GenerateSseEventDto>> streamGenerateTask(@PathVariable String taskId) {
         GenerateTaskDto task = treeifyService.getTask(taskId);
         String input = treeifyService.getTaskInput(taskId);
-        return Flux.fromIterable(generationService.buildEvents(taskId, task.mode(), input, task.currentStage()))
+        return Flux.fromIterable(generationService.buildEvents(
+                        taskId, task.mode(), input, task.currentStage(),
+                        task.e1Result(), task.e2Result(), task.feedback()))
                 .delayElements(Duration.ofMillis(350))
                 .doOnNext(treeifyService::applyEvent)
                 .map(event -> ServerSentEvent.<GenerateSseEventDto>builder()

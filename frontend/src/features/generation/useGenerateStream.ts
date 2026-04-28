@@ -17,6 +17,7 @@ import {
   isGenerateStage
 } from '../../shared/transforms/treeifyTransforms';
 import { useGenerationStore } from './generationStore';
+import { useWorkspaceStore } from '../workspace/workspaceStore';
 
 type Timer = ReturnType<typeof window.setTimeout>;
 
@@ -246,9 +247,21 @@ export function useGenerateStream() {
       clearTimers();
       closeEventSource();
 
-      const task = await createGenerateTask(getDefaultProjectId(), {
+      const { currentProjectId, nodes, selectedId } = useWorkspaceStore.getState();
+      const contextCaseIds = Array.from(
+        new Set(
+          nodes
+            .filter((node) => node.kind === 'case' && node.caseId)
+            .map((node) => Number(node.caseId))
+            .filter((caseId) => Number.isFinite(caseId) && caseId > 0)
+        )
+      );
+
+      const task = await createGenerateTask(currentProjectId || getDefaultProjectId(), {
         mode,
-        input
+        input,
+        selectedNodeId: selectedId,
+        contextCaseIds
       });
 
       useGenerationStore.getState().beginTask(task.taskId, input, mode, 'real');
@@ -281,14 +294,14 @@ export function useGenerateStream() {
     [startMockGeneration, startRealGeneration]
   );
 
-  const confirmCurrentStage = useCallback(async () => {
+  const confirmCurrentStage = useCallback(async (feedback?: string) => {
     const { activeStage, mode, source, taskId } = useGenerationStore.getState();
     if (!activeStage) {
       return;
     }
 
     if (source === 'real' && taskId) {
-      const task = await confirmGenerateTask(taskId, { stage: activeStage });
+      const task = await confirmGenerateTask(taskId, { stage: activeStage, feedback });
       useGenerationStore.getState().confirmCurrentStage();
       openRealStream(getGenerateStreamUrl(task));
       return;

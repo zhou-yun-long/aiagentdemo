@@ -5,8 +5,10 @@ import { OutlinePanel } from './components/OutlinePanel';
 import { SelectionBar } from './components/SelectionBar';
 import { Toolbar } from './components/Toolbar';
 import { getWorkspaceStats, useWorkspaceStore } from './features/workspace/workspaceStore';
+import { useCasePersistence } from './features/workspace/useCasePersistence';
 import { useMindmapSave } from './features/workspace/useMindmapSave';
 import { useProjectLoader } from './features/workspace/useProjectLoader';
+import { useWorkspaceAutosave } from './features/workspace/useWorkspaceAutosave';
 import type { MindNode } from './shared/types/workspace';
 
 function collectDescendants(nodes: MindNode[], parentId: string) {
@@ -48,6 +50,7 @@ function buildCaseExport(nodes: MindNode[]) {
 
 export default function App() {
   const nodes = useWorkspaceStore((state) => state.nodes);
+  const serverStats = useWorkspaceStore((state) => state.serverStats);
   const theme = useWorkspaceStore((state) => state.theme);
   const selectedId = useWorkspaceStore((state) => state.selectedId);
   const assistantOpen = useWorkspaceStore((state) => state.assistantOpen);
@@ -73,9 +76,12 @@ export default function App() {
 
   const { pageStatus, pageError } = useProjectLoader();
   const { save, saving, saveResult } = useMindmapSave();
+  useCasePersistence();
+  useWorkspaceAutosave();
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
-  const stats = useMemo(() => getWorkspaceStats(nodes), [nodes]);
+  const localStats = useMemo(() => getWorkspaceStats(nodes), [nodes]);
+  const stats = serverStats || localStats;
 
   const handleExportCases = () => {
     const cases = buildCaseExport(nodes);

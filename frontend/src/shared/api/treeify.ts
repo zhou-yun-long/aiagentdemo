@@ -6,6 +6,7 @@ import type {
   GenerateTaskDto,
   MindmapNodeDto,
   ProjectDto,
+  TestCaseRequest,
   TestCaseDto,
   TreeifyApiMode
 } from '../types/treeify';
@@ -35,6 +36,26 @@ export function getProjectCases(projectId = getDefaultProjectId()) {
 
 export function getProjectCaseStats(projectId = getDefaultProjectId()) {
   return request<CaseStatsDto>(`/api/v1/projects/${projectId}/cases/stats`);
+}
+
+export function updateCase(caseId: number, body: TestCaseRequest) {
+  return request<TestCaseDto>(`/api/v1/cases/${caseId}`, {
+    method: 'PUT',
+    body: JSON.stringify(body)
+  });
+}
+
+export function deleteCase(caseId: number) {
+  return request<{ deleted: boolean; caseId: number }>(`/api/v1/cases/${caseId}`, {
+    method: 'DELETE'
+  });
+}
+
+export function updateCaseExecutionStatus(caseId: number, executionStatus: TestCaseDto['executionStatus']) {
+  return request<TestCaseDto>(`/api/v1/cases/${caseId}/execution-status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ executionStatus })
+  });
 }
 
 export function createGenerateTask(projectId: number, body: CreateGenerateTaskRequest) {

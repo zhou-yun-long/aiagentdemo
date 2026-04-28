@@ -1,10 +1,20 @@
 import { useCallback, useEffect } from 'react';
 import { initialMindNodes } from '../../data/mindMap';
-import { getMindmap, getProjectCases, getTreeifyApiMode, listProjects } from '../../shared/api/treeify';
+import { getMindmap, getProjectCases, getProjectCaseStats, getTreeifyApiMode, listProjects } from '../../shared/api/treeify';
 import type { TestCaseDto } from '../../shared/types/treeify';
 import type { MindNode } from '../../shared/types/workspace';
 import { mindNodeFromDto, testCasesToMindNodes } from '../../shared/transforms/treeifyTransforms';
 import { useWorkspaceStore } from './workspaceStore';
+
+function statsFromServer(stats: { total: number; measured: number; passed: number; passRate: number }) {
+  return {
+    totalCases: stats.total,
+    testedCases: stats.measured,
+    passedCases: stats.passed,
+    failedCases: Math.max(0, stats.measured - stats.passed),
+    passRate: Math.round(stats.passRate * 10000) / 100
+  };
+}
 
 function buildNodeTree(projectName: string, cases: TestCaseDto[]): MindNode[] {
   const root: MindNode = {
@@ -99,6 +109,7 @@ function normalizeMindmapTree(projectName: string, nodes: MindNode[]): MindNode[
 
 export function useProjectLoader() {
   const setNodes = useWorkspaceStore((state) => state.setNodes);
+  const setServerStats = useWorkspaceStore((state) => state.setServerStats);
   const setPageStatus = useWorkspaceStore((state) => state.setPageStatus);
   const pageStatus = useWorkspaceStore((state) => state.pageStatus);
   const pageError = useWorkspaceStore((state) => state.pageError);
@@ -109,8 +120,11 @@ export function useProjectLoader() {
       const nodes = buildNodeTree(projectName, cases);
       setNodes(nodes);
       setPageStatus(cases.length ? 'ready' : 'empty');
+      getProjectCaseStats(projectId)
+        .then((stats) => setServerStats(statsFromServer(stats)))
+        .catch(() => setServerStats(null));
     },
-    [setNodes, setPageStatus]
+    [setNodes, setPageStatus, setServerStats]
   );
 
   const loadCases = useCallback(
@@ -121,6 +135,9 @@ export function useProjectLoader() {
           const nodes = normalizeMindmapTree(projectName, mindmapNodes.map(mindNodeFromDto));
           setNodes(nodes);
           setPageStatus('ready');
+          getProjectCaseStats(projectId)
+            .then((stats) => setServerStats(statsFromServer(stats)))
+            .catch(() => setServerStats(null));
           return;
         }
       } catch {
@@ -137,13 +154,14 @@ export function useProjectLoader() {
 
     if (!activeProject) {
       setNodes(initialMindNodes);
+      setServerStats(null);
       setPageStatus('empty');
       return;
     }
 
     useWorkspaceStore.setState({ currentProjectId: activeProject.id });
     await loadCases(activeProject.id, activeProject.name);
-  }, [loadCases, setNodes, setPageStatus]);
+  }, [loadCases, setNodes, setPageStatus, setServerStats]);
 
   const reloadCases = useCallback(async () => {
     const projectId = useWorkspaceStore.getState().currentProjectId;
@@ -168,6 +186,7 @@ export function useProjectLoader() {
 
     if (apiMode === 'mock') {
       setPageStatus('ready');
+      setServerStats(null);
       return;
     }
 
@@ -178,8 +197,9 @@ export function useProjectLoader() {
         return;
       }
       setPageStatus('ready');
+      setServerStats(null);
     });
-  }, [loadFromApi, setPageStatus]);
+  }, [loadFromApi, setPageStatus, setServerStats]);
 
   return { reloadCases, pageStatus, pageError };
 }

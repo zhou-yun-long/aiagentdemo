@@ -26,6 +26,7 @@ const stageIcon = {
 
 export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
   const [confirming, setConfirming] = useState(false);
+  const [feedback, setFeedback] = useState('');
   const mode = useGenerationStore((state) => state.mode);
   const input = useGenerationStore((state) => state.input);
   const status = useGenerationStore((state) => state.status);
@@ -54,7 +55,9 @@ export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
   };
 
   const handleConfirmStage = async () => {
-    await confirmCurrentStage();
+    const trimmed = feedback.trim();
+    await confirmCurrentStage(trimmed || undefined);
+    setFeedback('');
   };
 
   const handleModeChange = (nextMode: GenerationMode) => {
@@ -91,7 +94,7 @@ export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
             <span className={`api-mode ${source}`}>{apiMode === 'auto' ? `auto/${source}` : apiMode}</span>
             {criticScore !== undefined && <span className="critic-score">Critic {criticScore}</span>}
           </div>
-          <button className="ghost small" onClick={resetTask}>
+          <button className="ghost small" onClick={() => { resetTask(); setFeedback(''); }}>
             重置
           </button>
         </div>
@@ -135,6 +138,18 @@ export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
         </div>
         <pre>{streamStage?.content || '等待生成任务启动...'}</pre>
         {streamStage?.result && <p>{streamStage.result}</p>}
+        {canConfirm && activeStage && (activeStage === 'e1' || activeStage === 'e2') && (
+          <div className="feedback-area">
+            <label htmlFor="stage-feedback">阶段反馈（可选）</label>
+            <textarea
+              id="stage-feedback"
+              value={feedback}
+              onChange={(event) => setFeedback(event.target.value)}
+              placeholder="输入对当前阶段结果的反馈或修改建议..."
+              rows={3}
+            />
+          </div>
+        )}
         {error && <p className="stream-error">{error}</p>}
       </div>
 

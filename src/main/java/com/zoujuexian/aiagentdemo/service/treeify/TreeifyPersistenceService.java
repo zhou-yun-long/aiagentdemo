@@ -1,5 +1,6 @@
 package com.zoujuexian.aiagentdemo.service.treeify;
 
+import com.alibaba.fastjson.JSON;
 import com.zoujuexian.aiagentdemo.api.common.ApiErrorCode;
 import com.zoujuexian.aiagentdemo.api.common.BusinessException;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.BatchConfirmCasesRequest;
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -265,6 +267,9 @@ public class TreeifyPersistenceService {
         findProject(projectId);
         String mode = normalizeMode(request == null ? null : request.mode());
         String input = requireText(request == null ? null : request.input(), "需求输入不能为空");
+        List<Long> contextCaseIds = normalizeContextCaseIds(request == null ? null : request.contextCaseIds());
+        String selectedNodeId = defaultText(request == null ? null : request.selectedNodeId(), "");
+        String generationInput = appendGenerationContext(projectId, input, selectedNodeId, contextCaseIds);
 
         String taskId = UUID.randomUUID().toString();
         LocalDateTime now = LocalDateTime.now();
@@ -272,7 +277,9 @@ public class TreeifyPersistenceService {
         entity.setTaskId(taskId);
         entity.setProjectId(projectId);
         entity.setMode(mode);
-        entity.setInputText(input);
+        entity.setInputText(generationInput);
+        entity.setSelectedNodeId(selectedNodeId.isBlank() ? null : selectedNodeId);
+        entity.setContextCaseIds(contextCaseIds.isEmpty() ? null : JSON.toJSONString(contextCaseIds));
         entity.setStatus("pending");
         entity.setStreamUrl("/api/v1/generate/" + taskId + "/stream");
         entity.setCreatedAt(now);
@@ -287,6 +294,81 @@ public class TreeifyPersistenceService {
 
     public String getTaskInput(String taskId) {
         return defaultText(findTask(taskId).getInputText(), "");
+    }
+
+    private List<Long> normalizeContextCaseIds(List<Long> caseIds) {
+        if (caseIds == null || caseIds.isEmpty()) {
+            return List.of();
+        }
+        return new ArrayList<>(caseIds.stream()
+                .filter(id -> id != null && id > 0)
+                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll));
+    }
+
+    private String appendGenerationContext(Long projectId, String input, String selectedNodeId, List<Long> contextCaseIds) {
+        if (contextCaseIds.isEmpty() && selectedNodeId.isBlank()) {
+            return input;
+        }
+
+        StringBuilder context = new StringBuilder();
+        if (!selectedNodeId.isBlank()) {
+            context.append("当前选中节点：").append(selectedNodeId).append('\n');
+        }
+
+        List<TreeifyTestCase> contextCases = contextCaseIds.isEmpty()
+                ? List.of()
+                : caseRepo.findAllById(contextCaseIds).stream()
+                .filter(testCase -> projectId.equals(testCase.getProjectId()))
+                .toList();
+
+        if (!contextCases.isEmpty()) {
+            context.append("关联用例上下文：\n");
+            for (TreeifyTestCase testCase : contextCases) {
+                context.append("- #").append(testCase.getId())
+                        .append(" ").append(defaultText(testCase.getTitle(), "未命名用例"))
+                        .append("，优先级=").append(defaultText(testCase.getPriority(), "P1"))
+                        .append("，执行状态=").append(defaultText(testCase.getExecutionStatus(), "not_run"))
+                        .append("\n  前置条件：").append(defaultText(testCase.getPrecondition(), "无"))
+                        .append("\n  步骤：").append(String.join("；", testCase.getSteps() == null ? List.of() : testCase.getSteps()))
+                        .append("\n  预期：").append(defaultText(testCase.getExpected(), "无"))
+                        .append("\n");
+            }
+        }
+
+        if (context.length() == 0) {
+            return input;
+        }
+        return input + "\n\n【当前工作台上下文】\n" + context
+                + "请优先围绕当前选区和关联用例补充、扩展或修正测试覆盖。";
+    }
+
+    private List<Long> parseContextCaseIds(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        try {
+            return JSON.parseArray(value, Long.class);
+        } catch (Exception ignored) {
+            return List.of();
+        }
+    }
+
+    public void saveStageResult(String taskId, String stage, String resultJson) {
+        TreeifyGenerationTask entity = findTask(taskId);
+        if ("e1".equals(stage)) {
+            entity.setE1Result(resultJson);
+        } else if ("e2".equals(stage)) {
+            entity.setE2Result(resultJson);
+        }
+        entity.setUpdatedAt(LocalDateTime.now());
+        taskRepo.save(entity);
+    }
+
+    public void saveFeedback(String taskId, String feedback) {
+        TreeifyGenerationTask entity = findTask(taskId);
+        entity.setFeedback(feedback);
+        entity.setUpdatedAt(LocalDateTime.now());
+        taskRepo.save(entity);
     }
 
     public GenerateTaskDto updateTaskStatus(
@@ -366,6 +448,11 @@ public class TreeifyPersistenceService {
                 entity.getCurrentStage(),
                 entity.getStreamUrl(),
                 entity.getCriticScore(),
+                entity.getSelectedNodeId(),
+                parseContextCaseIds(entity.getContextCaseIds()),
+                entity.getE1Result(),
+                entity.getE2Result(),
+                entity.getFeedback(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
                 entity.getCompletedAt()

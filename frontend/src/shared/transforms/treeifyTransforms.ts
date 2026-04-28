@@ -1,6 +1,6 @@
 import type { GeneratedCaseDraft, GenerateStage } from '../../types/generation';
-import type { GeneratedCaseDto, GenerateSsePayload, MindmapNodeDto, TestCaseDto } from '../types/treeify';
-import type { MindNode, Priority } from '../types/workspace';
+import type { GeneratedCaseDto, GenerateSsePayload, MindmapNodeDto, TestCaseDto, TestCaseRequest } from '../types/treeify';
+import type { ExecutionStatus, MindNode, Priority } from '../types/workspace';
 
 const lanes: MindNode['lane'][] = ['upper', 'middle', 'lower'];
 
@@ -192,5 +192,45 @@ export function mindNodeFromDto(dto: MindmapNodeDto): MindNode {
     depth: dto.depth,
     order: dto.order,
     layout: dto.layout ? { ...dto.layout } : undefined
+  };
+}
+
+function splitSteps(value: string | undefined) {
+  return (value || '')
+    .split(/[；;\n]/)
+    .map((step) => step.trim())
+    .filter(Boolean);
+}
+
+export function buildTestCaseRequest(nodes: MindNode[], caseId: string): TestCaseRequest | null {
+  const caseNode = nodes.find((node) => node.kind === 'case' && node.caseId === caseId);
+  if (!caseNode) {
+    return null;
+  }
+
+  const conditionNode = nodes.find((node) => node.parentId === caseNode.id && node.kind === 'condition');
+  const directStepNodes = nodes
+    .filter((node) => node.parentId === caseNode.id && node.kind === 'step')
+    .sort((a, b) => a.order - b.order);
+  const nestedStepNodes = nodes
+    .filter((node) => node.caseId === caseId && node.kind === 'step')
+    .sort((a, b) => a.depth - b.depth || a.order - b.order);
+  const stepNodes = directStepNodes.length ? directStepNodes : nestedStepNodes;
+  const firstStep = stepNodes[0];
+  const expectedNode = firstStep
+    ? nodes.find((node) => node.parentId === firstStep.id && node.kind === 'expected')
+    : nodes.find((node) => node.caseId === caseId && node.kind === 'expected');
+
+  return {
+    parentId: null,
+    title: caseNode.title,
+    precondition: conditionNode?.title || '',
+    steps: stepNodes.flatMap((node) => splitSteps(node.title)),
+    expected: expectedNode?.title || '',
+    priority: normalizePriority(caseNode.priority),
+    tags: caseNode.tags || [],
+    source: caseNode.source || 'manual',
+    executionStatus: (caseNode.executionStatus || 'not_run') as ExecutionStatus,
+    layout: caseNode.layout || { collapsed: false }
   };
 }
