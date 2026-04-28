@@ -1,9 +1,9 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { initialMindNodes } from '../../data/mindMap';
-import { getMindmap, getProjectCases, getProjectCaseStats, getTreeifyApiMode, listProjects } from '../../shared/api/treeify';
-import type { TestCaseDto } from '../../shared/types/treeify';
+import { getMindmap, getProjectCases, getProjectCaseStats, getTreeifyApiMode, listProjects, saveMindmap } from '../../shared/api/treeify';
+import type { ProjectDto, TestCaseDto } from '../../shared/types/treeify';
 import type { MindNode } from '../../shared/types/workspace';
-import { mindNodeFromDto, statsFromServer, testCasesToMindNodes } from '../../shared/transforms/treeifyTransforms';
+import { mindNodeFromDto, mindNodeToDto, statsFromServer, testCasesToMindNodes } from '../../shared/transforms/treeifyTransforms';
 import { useWorkspaceStore } from './workspaceStore';
 
 function buildNodeTree(projectName: string, cases: TestCaseDto[]): MindNode[] {
@@ -105,6 +105,8 @@ export function useProjectLoader() {
   const pageError = useWorkspaceStore((state) => state.pageError);
   const readOnly = useWorkspaceStore((state) => state.readOnly);
 
+  const [projects, setProjects] = useState<ProjectDto[]>([]);
+
   const loadCasesFromCasesApi = useCallback(
     async (projectId: number, projectName: string) => {
       const cases = await getProjectCases(projectId);
@@ -140,8 +142,9 @@ export function useProjectLoader() {
   );
 
   const loadFromApi = useCallback(async () => {
-    const projects = await listProjects();
-    const activeProject = projects.find((project) => project.status === 'active');
+    const allProjects = await listProjects();
+    setProjects(allProjects);
+    const activeProject = allProjects.find((project) => project.status === 'active');
 
     if (!activeProject) {
       setNodes(initialMindNodes);
@@ -153,6 +156,27 @@ export function useProjectLoader() {
     useWorkspaceStore.setState({ currentProjectId: activeProject.id });
     await loadCases(activeProject.id, activeProject.name);
   }, [loadCases, setNodes, setPageStatus, setServerStats]);
+
+  const switchProject = useCallback(async (projectId: number) => {
+    const { currentProjectId, nodes: currentNodes, dirty, markClean } = useWorkspaceStore.getState();
+
+    // Save current project's mindmap before switching
+    if (dirty && currentProjectId) {
+      try {
+        const dtos = currentNodes.map(mindNodeToDto);
+        await saveMindmap(currentProjectId, dtos);
+        markClean();
+      } catch {
+        // Best-effort save, continue with switch
+      }
+    }
+
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) return;
+
+    useWorkspaceStore.setState({ currentProjectId: projectId });
+    await loadCases(projectId, project.name);
+  }, [projects, loadCases]);
 
   const reloadCases = useCallback(async () => {
     const projectId = useWorkspaceStore.getState().currentProjectId;
@@ -196,5 +220,5 @@ export function useProjectLoader() {
     });
   }, [readOnly, loadFromApi, setPageStatus, setServerStats]);
 
-  return { reloadCases, pageStatus, pageError };
+  return { reloadCases, switchProject, projects, pageStatus, pageError };
 }

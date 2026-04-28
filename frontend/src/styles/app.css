@@ -128,6 +128,16 @@ textarea {
   font-size: 13px;
 }
 
+.project-selector {
+  font-size: 13px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+
 .progress {
   position: relative;
   width: 240px;

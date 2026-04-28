@@ -26,6 +26,7 @@ import {
   Wrench
 } from 'lucide-react';
 import type { ThemeMode, WorkspaceStats } from '../shared/types/workspace';
+import type { ProjectDto } from '../shared/types/treeify';
 import type { ExportFormat } from '../utils/exportCases';
 
 type SaveResult = {
@@ -38,6 +39,9 @@ type ToolbarProps = {
   theme: ThemeMode;
   onToggleTheme: () => void;
   readOnly?: boolean;
+  projects: ProjectDto[];
+  currentProjectId: number | null;
+  onSwitchProject: (projectId: number) => void;
   assistantOpen: boolean;
   onToggleAssistant: () => void;
   summaryOpen: boolean;
@@ -68,6 +72,9 @@ export function Toolbar({
   theme,
   onToggleTheme,
   readOnly,
+  projects,
+  currentProjectId,
+  onSwitchProject,
   assistantOpen,
   onToggleAssistant,
   summaryOpen,
@@ -129,7 +136,19 @@ export function Toolbar({
             <span className="pass" style={{ width: `${stats.passRate}%` }} />
             <span className="fail" style={{ left: `${stats.passRate}%`, width: `${failedRate}%` }} />
           </div>
-          <span>标题：speccase 登录用例</span>
+          {projects.length > 1 ? (
+            <select
+              className="project-selector"
+              value={currentProjectId || ''}
+              onChange={(e) => onSwitchProject(Number(e.target.value))}
+            >
+              {projects.filter((p) => p.status === 'active').map((p) => (
+                <option value={p.id} key={p.id}>{p.name}</option>
+              ))}
+            </select>
+          ) : (
+            <span>标题：{projects[0]?.name || '未命名项目'}</span>
+          )}
         </div>
         <div className="actions">
           <button className="ghost" onClick={onToggleAssistant}>

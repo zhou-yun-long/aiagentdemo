@@ -85,7 +85,7 @@ export default function App() {
 
   const [shareOpen, setShareOpen] = useState(false);
 
-  const { pageStatus, pageError } = useProjectLoader();
+  const { pageStatus, pageError, projects, switchProject } = useProjectLoader();
   const { save, saving, saveResult } = useMindmapSave();
   useCasePersistence();
   useWorkspaceAutosave();
@@ -115,6 +115,9 @@ export default function App() {
         stats={stats}
         theme={theme}
         readOnly={readOnly}
+        projects={projects}
+        currentProjectId={currentProjectId}
+        onSwitchProject={switchProject}
         assistantOpen={assistantOpen}
         onToggleAssistant={toggleAssistant}
         summaryOpen={summaryOpen}
