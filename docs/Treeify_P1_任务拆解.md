@@ -1,7 +1,7 @@
 # Treeify P1 任务拆解
 
 > 基于 P0 MVP 已完成的主链路，评估并拆解下一轮 P1 开发任务。
-> 更新时间：2026-04-27
+> 更新时间：2026-04-29
 > 当前分支：`codex/backend-contracts`
 
 ---
@@ -61,9 +61,11 @@
 
 ## 3. 每个任务的详细拆解
 
-### 3.1 P1-1：节点编辑/删除/执行状态持久化
+### 3.1 P1-1：节点编辑/删除/执行状态持久化 ✅ 已完成
 
 **目标**：用户在工作台上的所有节点操作（编辑标题/优先级/标签、删除节点、切换执行状态）刷新后不丢失。
+
+**完成状态**：通过 `useCasePersistence` hook 实现，监听 `caseDirtyIds`/`statusDirtyIds`/`deletedCaseIds`，debounced 调用后端 API，mock 模式自动跳过。
 
 **涉及前端文件**：
 
@@ -108,9 +110,11 @@
 
 ---
 
-### 3.2 P1-2：顶部统计改用 /cases/stats
+### 3.2 P1-2：顶部统计改用 /cases/stats ✅ 已完成
 
 **目标**：顶部统计（总用例数、已测数、通过数、通过率）从后端 `/cases/stats` 接口获取，与后端数据保持一致。
+
+**完成状态**：`useProjectLoader` 加载时调用 `getProjectCaseStats()` 存入 `serverStats`，`App.tsx` 中 `serverStats || localStats` 优先服务端数据，`useCasePersistence` 每次变更后自动刷新。
 
 **涉及前端文件**：
 

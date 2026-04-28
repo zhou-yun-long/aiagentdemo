@@ -1,7 +1,7 @@
 # Treeify MVP 最终验收清单
 
 > 分支：`codex/backend-contracts`
-> 最后更新：2026-04-27
+> 最后更新：2026-04-29
 
 ---
 
@@ -662,30 +662,50 @@ docker compose logs backend | grep "llmAvailable"
 
 Step 模式的 E2、E3 阶段**已实现**阶段间上下文传递。E2 使用 `e2Prompt(input, e1Result)` 带上 E1 分析结果，E3 使用 `e3Prompt(input, e1Result, e2Result)` 带上两阶段结果。confirm 时的 `feedback` 也会拼入下一阶段 prompt。与 Auto 模式（`rebuildAutoEvents`）行为一致。详细验证见 `docs/P1_step_context_validation.md`。
 
-### 11.3 真实 AI 需有效 API Key
+### 11.3 节点编辑/删除/执行状态持久化（P1-1 已完成）
+
+节点操作（编辑标题/优先级/标签、删除节点、切换执行状态）**已实现**后端持久化，刷新后不丢失。
+
+**实现方式**：`useCasePersistence` hook（`frontend/src/features/workspace/useCasePersistence.ts`）监听三组 dirty ID，自动调用后端 API：
+
+| 操作 | Dirty 追踪 | API 调用 | Debounce |
+|------|-----------|---------|----------|
+| 删除节点 | `deletedCaseIds` | `DELETE /api/v1/cases/{caseId}` | 立即 |
+| 执行状态变更 | `statusDirtyIds` | `PATCH /api/v1/cases/{caseId}/execution-status` | 600ms |
+| 内容编辑（标题/优先级/标签） | `caseDirtyIds` | `PUT /api/v1/cases/{caseId}` | 900ms |
+
+每次 API 调用成功后自动刷新统计（`refreshStats`）。Mock 模式下跳过 API 调用，仅清除 dirty 标记。脑图整体保存（`PUT /projects/{id}/mindmap`）通过 `useWorkspaceAutosave` 作为兜底。
+
+### 11.4 顶部统计改用后端 /cases/stats（P1-2 已完成）
+
+顶部统计栏（总用例数、已测数、通过数、通过率）**已实现**从后端 `GET /api/v1/projects/{projectId}/cases/stats` 获取。
+
+**实现方式**：`useProjectLoader` 在加载项目和用例时调用 `getProjectCaseStats()`，结果存入 `serverStats`。`App.tsx` 中 `const stats = serverStats || localStats`，服务端数据优先，本地计算作 fallback。`useCasePersistence` 在每次用例变更后自动调用 `refreshStats()` 刷新。
+
+### 11.5 真实 AI 需有效 API Key
 
 AI 模式依赖有效的 `OPENAI_API_KEY` 和可访问的 `OPENAI_BASE_URL`。任一不可用会降级为 Mock。
 
-### 11.4 H2 文件数据库
+### 11.6 H2 文件数据库
 
 - 单实例访问（文件锁），不适合多实例部署
 - 数据文件 `data/treeify.mv.db` 需挂载卷持久化
 - Docker `down -v` 会删除数据
 
-### 11.5 Spring AI 里程碑版本
+### 11.7 Spring AI 里程碑版本
 
 - `spring-ai` 版本 `2.0.0-M4`（Milestone），API 可能变动
 - Spring Boot `4.0.5`，前沿版本
 
-### 11.6 脑图与用例非强绑定
+### 11.8 脑图与用例非强绑定
 
 脑图节点通过 `caseId` 关联测试用例，但二者独立 CRUD。脑图保存后若单独删除用例，节点不自动同步。
 
-### 11.7 无分页
+### 11.9 无分页
 
 项目和用例列表 API 无分页，大量数据时性能需关注。
 
-### 11.8 无用户认证
+### 11.10 无用户认证
 
 系统当前无用户认证/授权机制，所有 API 可以匿名访问。
 
