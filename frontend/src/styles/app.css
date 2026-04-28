@@ -675,7 +675,8 @@ textarea {
 }
 
 .summary-panel,
-.knowledge-panel {
+.knowledge-panel,
+.snapshot-panel {
   display: none;
   overflow: hidden;
   border-left: 1px solid var(--border);
@@ -683,7 +684,8 @@ textarea {
 }
 
 .summary-panel.open,
-.knowledge-panel.open {
+.knowledge-panel.open,
+.snapshot-panel.open {
   display: flex;
   flex-direction: column;
   width: 380px;
@@ -1107,6 +1109,97 @@ button.small:disabled {
   background: transparent;
 }
 
+/* Snapshot panel specific */
+.snapshot-create {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.snapshot-create input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.snapshot-create button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--blue);
+  border-radius: 6px;
+  color: #ffffff;
+  background: var(--blue);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.snapshot-create button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.snapshot-list {
+  display: grid;
+  gap: 10px;
+}
+
+.snapshot-item {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.snapshot-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.snapshot-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshot-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.snapshot-date {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.snapshot-desc {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.snapshot-item button.small {
+  margin-top: 8px;
+}
+
 .generate-panel {
   display: grid;
   gap: 12px;
@@ -1395,7 +1488,8 @@ button.small:disabled {
 
   .assistant-panel.open,
   .summary-panel.open,
-  .knowledge-panel.open {
+  .knowledge-panel.open,
+  .snapshot-panel.open {
     position: absolute;
     top: 112px;
     right: 0;

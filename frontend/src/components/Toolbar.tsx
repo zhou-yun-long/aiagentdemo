@@ -4,6 +4,7 @@ import {
   ArrowUp,
   BookOpen,
   Bot,
+  Camera,
   ChevronDown,
   Download,
   FileText,
@@ -41,6 +42,8 @@ type ToolbarProps = {
   onToggleSummary: () => void;
   knowledgeOpen: boolean;
   onToggleKnowledge: () => void;
+  snapshotOpen: boolean;
+  onToggleSnapshot: () => void;
   onAddChild: () => void;
   onAddSibling: () => void;
   onDelete: () => void;
@@ -66,6 +69,8 @@ export function Toolbar({
   onToggleSummary,
   knowledgeOpen,
   onToggleKnowledge,
+  snapshotOpen,
+  onToggleSnapshot,
   onAddChild,
   onAddSibling,
   onDelete,
@@ -131,6 +136,10 @@ export function Toolbar({
           <button className="ghost" onClick={onToggleKnowledge}>
             <BookOpen size={15} />
             {knowledgeOpen ? '关闭知识库' : '知识库'}
+          </button>
+          <button className="ghost" onClick={onToggleSnapshot}>
+            <Camera size={15} />
+            {snapshotOpen ? '关闭快照' : '快照'}
           </button>
           <div className="export-dropdown" ref={exportRef}>
             <button className="ghost" onClick={() => setExportOpen((v) => !v)}>

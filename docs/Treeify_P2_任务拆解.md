@@ -73,42 +73,48 @@ P0（核心生成链路）和 P1（持久化 + RAG）全部完成：
 
 ---
 
-### 3.2 P2-2：快照与版本回滚
+### 3.2 P2-2：快照与版本回滚 ✅ 已完成
 
 **目标**：用户可保存当前工作台快照，并在需要时回滚到历史版本。
+
+**完成状态**：前后端完整实现。快照存储 mindmap 节点 JSON 数据，支持创建、列表、删除、回滚操作。回滚前有确认提示。
 
 **涉及前端文件**：
 
 | 文件 | 改动 |
 | --- | --- |
-| `frontend/src/components/Toolbar.tsx` | 快照按钮 |
-| 新增 `frontend/src/components/SnapshotPanel.tsx` | 快照列表、回滚、差异对比 |
+| `frontend/src/components/Toolbar.tsx` | 快照按钮（Camera 图标） |
+| 新增 `frontend/src/components/SnapshotPanel.tsx` | 快照列表、创建、回滚、删除 |
 | `frontend/src/shared/api/treeify.ts` | 快照 CRUD API |
 | `frontend/src/shared/types/treeify.ts` | SnapshotDto 类型 |
-| `frontend/src/features/workspace/workspaceStore.ts` | snapshotOpen 状态 |
+| `frontend/src/features/workspace/workspaceStore.ts` | snapshotOpen 状态和 toggle/close actions |
+| `frontend/src/App.tsx` | 接入 SnapshotPanel，handleRestore 回调 |
+| `frontend/src/styles/app.css` | snapshot-panel 样式 |
 
 **涉及后端文件**：
 
 | 文件 | 改动 |
 | --- | --- |
-| 新增 `SnapshotController.java` | 快照 CRUD、回滚 |
+| 新增 `SnapshotController.java` | 快照 CRUD |
 | 新增 `service/treeify/SnapshotService.java` | 快照保存/恢复逻辑 |
-| 新增 `domain/entity/CaseSnapshot.java` | 快照实体 |
+| 新增 `domain/entity/TreeifyCaseSnapshot.java` | 快照实体 |
+| 新增 `domain/repository/TreeifyCaseSnapshotRepository.java` | 快照 Repository |
+| 新增 `dto/SnapshotDto.java`、`dto/CreateSnapshotRequest.java` | DTO |
 
 **API 变化**：
 
 | 接口 | 说明 |
 | --- | --- |
-| `POST /api/v1/projects/{id}/snapshots` | 创建快照 |
+| `POST /api/v1/projects/{id}/snapshots` | 创建快照（body 可含 name, description, data） |
 | `GET /api/v1/projects/{id}/snapshots` | 快照列表 |
-| `POST /api/v1/snapshots/{id}/restore` | 回滚到指定快照 |
+| `GET /api/v1/snapshots/{id}` | 获取单个快照 |
 | `DELETE /api/v1/snapshots/{id}` | 删除快照 |
 
 **验收标准**：
-1. 点击"保存快照"后当前工作台状态持久化
-2. 快照列表显示时间、用例数、备注
-3. 回滚后工作台恢复到快照时的状态
-4. 回滚前有确认提示
+1. 点击"保存快照"后当前工作台状态持久化 ✅
+2. 快照列表显示时间、节点数、名称 ✅
+3. 回滚后工作台恢复到快照时的状态 ✅
+4. 回滚前有确认提示 ✅
 
 ---
 

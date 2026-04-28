@@ -161,3 +161,14 @@ export type KnowledgeDocumentDto = {
   source: string;
   createdAt: string;
 };
+
+export type SnapshotDto = {
+  id: number;
+  projectId: number;
+  name: string;
+  description: string;
+  caseCount: number;
+  format: string;
+  data: string;
+  createdAt: string;
+};

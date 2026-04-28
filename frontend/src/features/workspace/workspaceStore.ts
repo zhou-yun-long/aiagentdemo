@@ -15,6 +15,7 @@ type WorkspaceState = {
   outlineOpen: boolean;
   summaryOpen: boolean;
   knowledgeOpen: boolean;
+  snapshotOpen: boolean;
   zoom: number;
   lastSnapshotAt?: string;
   currentProjectId: number | null;
@@ -33,6 +34,8 @@ type WorkspaceState = {
   closeSummary: () => void;
   toggleKnowledge: () => void;
   closeKnowledge: () => void;
+  toggleSnapshot: () => void;
+  closeSnapshot: () => void;
   updateNode: (id: string, patch: Partial<MindNode>) => void;
   addChildNode: () => void;
   addSiblingNode: () => void;
@@ -212,6 +215,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   outlineOpen: true,
   summaryOpen: false,
   knowledgeOpen: false,
+  snapshotOpen: false,
   zoom: 1,
   currentProjectId: null,
   pageStatus: 'loading',
@@ -229,6 +233,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   closeSummary: () => set({ summaryOpen: false }),
   toggleKnowledge: () => set((state) => ({ knowledgeOpen: !state.knowledgeOpen })),
   closeKnowledge: () => set({ knowledgeOpen: false }),
+  toggleSnapshot: () => set((state) => ({ snapshotOpen: !state.snapshotOpen })),
+  closeSnapshot: () => set({ snapshotOpen: false }),
   updateNode: (id, patch) =>
     set((state) => {
       const dirtyCaseIds = getDirtyCaseIdsForNode(state.nodes, id);

@@ -4,6 +4,7 @@ import { KnowledgePanel } from './components/KnowledgePanel';
 import { MindMapCanvas } from './components/MindMapCanvas';
 import { OutlinePanel } from './components/OutlinePanel';
 import { SelectionBar } from './components/SelectionBar';
+import { SnapshotPanel } from './components/SnapshotPanel';
 import { SummaryPanel } from './components/SummaryPanel';
 import { Toolbar } from './components/Toolbar';
 import { getDescendantIds, getWorkspaceStats, useWorkspaceStore } from './features/workspace/workspaceStore';
@@ -48,6 +49,7 @@ export default function App() {
   const outlineOpen = useWorkspaceStore((state) => state.outlineOpen);
   const summaryOpen = useWorkspaceStore((state) => state.summaryOpen);
   const knowledgeOpen = useWorkspaceStore((state) => state.knowledgeOpen);
+  const snapshotOpen = useWorkspaceStore((state) => state.snapshotOpen);
   const zoom = useWorkspaceStore((state) => state.zoom);
   const lastSnapshotAt = useWorkspaceStore((state) => state.lastSnapshotAt);
   const selectNode = useWorkspaceStore((state) => state.selectNode);
@@ -59,6 +61,8 @@ export default function App() {
   const closeSummary = useWorkspaceStore((state) => state.closeSummary);
   const toggleKnowledge = useWorkspaceStore((state) => state.toggleKnowledge);
   const closeKnowledge = useWorkspaceStore((state) => state.closeKnowledge);
+  const toggleSnapshot = useWorkspaceStore((state) => state.toggleSnapshot);
+  const closeSnapshot = useWorkspaceStore((state) => state.closeSnapshot);
   const updateNode = useWorkspaceStore((state) => state.updateNode);
   const addChildNode = useWorkspaceStore((state) => state.addChildNode);
   const addSiblingNode = useWorkspaceStore((state) => state.addSiblingNode);
@@ -71,6 +75,7 @@ export default function App() {
   const dirty = useWorkspaceStore((state) => state.dirty);
   const currentProjectId = useWorkspaceStore((state) => state.currentProjectId);
   const appendAiRows = useWorkspaceStore((state) => state.appendAiRows);
+  const setNodes = useWorkspaceStore((state) => state.setNodes);
 
   const { pageStatus, pageError } = useProjectLoader();
   const { save, saving, saveResult } = useMindmapSave();
@@ -86,6 +91,11 @@ export default function App() {
     exportCases(cases, format);
   };
 
+  const handleSnapshotRestore = (restoredNodes: MindNode[]) => {
+    setNodes(restoredNodes);
+    closeSnapshot();
+  };
+
   return (
     <div className={`app ${theme}`}>
       <Toolbar
@@ -97,6 +107,8 @@ export default function App() {
         onToggleSummary={toggleSummary}
         knowledgeOpen={knowledgeOpen}
         onToggleKnowledge={toggleKnowledge}
+        snapshotOpen={snapshotOpen}
+        onToggleSnapshot={toggleSnapshot}
         onToggleTheme={toggleTheme}
         onAddChild={addChildNode}
         onAddSibling={addSiblingNode}
@@ -109,7 +121,7 @@ export default function App() {
         saveResult={saveResult}
         onSave={save}
       />
-      <div className={`workspace ${assistantOpen ? '' : 'assistant-closed'} ${outlineOpen ? '' : 'outline-hidden'} ${summaryOpen ? 'summary-open' : ''} ${knowledgeOpen ? 'knowledge-open' : ''}`}>
+      <div className={`workspace ${assistantOpen ? '' : 'assistant-closed'} ${outlineOpen ? '' : 'outline-hidden'} ${summaryOpen ? 'summary-open' : ''} ${knowledgeOpen ? 'knowledge-open' : ''} ${snapshotOpen ? 'snapshot-open' : ''}`}>
         {outlineOpen && <OutlinePanel nodes={nodes} selectedId={selectedId} onSelect={selectNode} onClose={toggleOutline} />}
         <section className="work-area">
           {pageStatus === 'loading' ? (
@@ -164,6 +176,13 @@ export default function App() {
           open={knowledgeOpen}
           projectId={currentProjectId ?? getDefaultProjectId()}
           onClose={closeKnowledge}
+        />
+        <SnapshotPanel
+          open={snapshotOpen}
+          projectId={currentProjectId ?? getDefaultProjectId()}
+          nodes={nodes}
+          onClose={closeSnapshot}
+          onRestore={handleSnapshotRestore}
         />
       </div>
     </div>

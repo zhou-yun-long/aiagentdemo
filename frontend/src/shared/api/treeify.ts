@@ -8,6 +8,7 @@ import type {
   MindmapNodeDto,
   ProjectDto,
   ProjectSummaryDto,
+  SnapshotDto,
   TestCaseRequest,
   TestCaseDto,
   TreeifyApiMode
@@ -149,5 +150,26 @@ export function searchKnowledge(projectId: number, keyword: string, limit?: numb
   if (limit !== undefined) params.set('limit', String(limit));
   return request<KnowledgeDocumentDto[]>(`/api/v1/projects/${projectId}/knowledge/search?${params}`, {
     method: 'POST'
+  });
+}
+
+export function listSnapshots(projectId: number) {
+  return request<SnapshotDto[]>(`/api/v1/projects/${projectId}/snapshots`);
+}
+
+export function createSnapshot(projectId: number, name?: string, description?: string, data?: string) {
+  return request<SnapshotDto>(`/api/v1/projects/${projectId}/snapshots`, {
+    method: 'POST',
+    body: JSON.stringify({ name, description, data })
+  });
+}
+
+export function getSnapshot(snapshotId: number) {
+  return request<SnapshotDto>(`/api/v1/snapshots/${snapshotId}`);
+}
+
+export function deleteSnapshot(snapshotId: number) {
+  return request<{ deleted: boolean }>(`/api/v1/snapshots/${snapshotId}`, {
+    method: 'DELETE'
   });
 }
