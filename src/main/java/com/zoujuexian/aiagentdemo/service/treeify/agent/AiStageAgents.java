@@ -9,6 +9,7 @@ import com.zoujuexian.aiagentdemo.service.treeify.MockGenerationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +18,7 @@ import java.util.List;
  * AI-powered StageAgent implementations.
  * Each agent handles prompt construction, LLM call, and response parsing for one stage.
  * Prompts are enriched with project summary and RAG context when available.
+ * Supports both synchronous and streaming execution modes.
  */
 public final class AiStageAgents {
 
@@ -51,6 +53,16 @@ public final class AiStageAgents {
         return JsonOutputParser.parseObject(response);
     }
 
+    /**
+     * Stream LLM response tokens using ChatClient.stream().
+     */
+    private static Flux<String> streamChat(ChatClient chatClient, String prompt) {
+        return chatClient.prompt().user(prompt).stream().chatResponse()
+                .mapNotNull(cr -> cr.getResult() != null && cr.getResult().getOutput() != null
+                        ? cr.getResult().getOutput().getText()
+                        : null);
+    }
+
     // ──── E1: Requirements Analysis ────
 
     public static class E1Agent implements StageAgent {
@@ -63,8 +75,7 @@ public final class AiStageAgents {
         @Override
         public String stageName() { return "e1"; }
 
-        @Override
-        public StageResult execute(StageContext context) {
+        private String buildPrompt(StageContext context) {
             String basePrompt = """
                     你是一个专业的测试分析师。请根据以下需求，提取业务目标、用户动作、系统行为和约束条件。
 
@@ -78,9 +89,20 @@ public final class AiStageAgents {
 
                     只返回 JSON，不要添加其他文字。
                     """.formatted(context.input());
-            String prompt = enrichPrompt(context, basePrompt);
+            return enrichPrompt(context, basePrompt);
+        }
+
+        @Override
+        public StageResult execute(StageContext context) {
+            String prompt = buildPrompt(context);
             JSONObject result = callAndParse(chatClient, prompt);
             return new StageResult("正在解析需求目标、用户动作和系统约束...", result);
+        }
+
+        @Override
+        public Flux<String> streamExecute(StageContext context) {
+            String prompt = buildPrompt(context);
+            return streamChat(chatClient, prompt);
         }
     }
 
@@ -96,27 +118,37 @@ public final class AiStageAgents {
         @Override
         public String stageName() { return "e2"; }
 
-        @Override
-        public StageResult execute(StageContext context) {
+        private String buildPrompt(StageContext context) {
             String e1ResultJson = context.getResultJson("e1");
             String basePrompt;
             if (e1ResultJson != null && !e1ResultJson.isBlank()) {
                 try {
                     JSONObject e1 = JsonOutputParser.parseObject(e1ResultJson);
-                    basePrompt = buildPrompt(context.input(), e1 != null ? e1.toJSONString() : null);
+                    basePrompt = buildPromptText(context.input(), e1 != null ? e1.toJSONString() : null);
                 } catch (Exception e) {
-                    basePrompt = buildPrompt(context.input(), null);
+                    basePrompt = buildPromptText(context.input(), null);
                 }
             } else {
-                basePrompt = buildPrompt(context.input(), null);
+                basePrompt = buildPromptText(context.input(), null);
             }
             basePrompt = appendFeedback(basePrompt, context.feedback());
-            String prompt = enrichPrompt(context, basePrompt);
+            return enrichPrompt(context, basePrompt);
+        }
+
+        @Override
+        public StageResult execute(StageContext context) {
+            String prompt = buildPrompt(context);
             JSONObject result = callAndParse(chatClient, prompt);
             return new StageResult("正在拆分可测试对象...", result);
         }
 
-        private String buildPrompt(String input, String e1Json) {
+        @Override
+        public Flux<String> streamExecute(StageContext context) {
+            String prompt = buildPrompt(context);
+            return streamChat(chatClient, prompt);
+        }
+
+        private String buildPromptText(String input, String e1Json) {
             String priorSection = (e1Json != null && !e1Json.isBlank())
                     ? "E1 分析结果：" + e1Json + "\n\n"
                     : "";
@@ -153,23 +185,33 @@ public final class AiStageAgents {
         @Override
         public String stageName() { return "e3"; }
 
-        @Override
-        public StageResult execute(StageContext context) {
+        private String buildPrompt(StageContext context) {
             Object e1 = JsonOutputParser.safeParse(context.getResultJson("e1"));
             Object e2 = JsonOutputParser.safeParse(context.getResultJson("e2"));
             String basePrompt;
             if (e1 != null || e2 != null) {
-                basePrompt = buildPrompt(context.input(), JsonOutputParser.stringify(e1), JsonOutputParser.stringify(e2));
+                basePrompt = buildPromptText(context.input(), JsonOutputParser.stringify(e1), JsonOutputParser.stringify(e2));
             } else {
-                basePrompt = buildPrompt(context.input(), null, null);
+                basePrompt = buildPromptText(context.input(), null, null);
             }
             basePrompt = appendFeedback(basePrompt, context.feedback());
-            String prompt = enrichPrompt(context, basePrompt);
+            return enrichPrompt(context, basePrompt);
+        }
+
+        @Override
+        public StageResult execute(StageContext context) {
+            String prompt = buildPrompt(context);
             List<GeneratedCaseDto> cases = callAndParseCases(prompt);
             return new StageResult("正在生成测试用例...", cases);
         }
 
-        private String buildPrompt(String input, String e1, String e2) {
+        @Override
+        public Flux<String> streamExecute(StageContext context) {
+            String prompt = buildPrompt(context);
+            return streamChat(chatClient, prompt);
+        }
+
+        private String buildPromptText(String input, String e1, String e2) {
             boolean hasContext = e1 != null && !e1.equals("无");
             String priorSection = hasContext
                     ? "E1 分析结果：%s\n\nE2 拆分结果：%s\n\n".formatted(e1, e2)
@@ -252,6 +294,24 @@ public final class AiStageAgents {
         @Override
         public String stageName() { return "critic"; }
 
+        private String buildPrompt(StageContext context, List<GeneratedCaseDto> cases) {
+            String basePrompt = """
+                    你是一个专业的测试质量评审专家(Critic)。请评审以下测试用例的质量。
+
+                    需求：%s
+
+                    生成的测试用例：%s
+
+                    请以 JSON 格式返回评审结果：
+                    - score: 评分(0-100)
+                    - issues: 发现的问题列表
+                    - retryCount: 需要重试的次数(0表示通过)
+
+                    只返回 JSON，不要添加其他文字。
+                    """.formatted(context.input(), JSON.toJSONString(cases));
+            return enrichPrompt(context, basePrompt);
+        }
+
         @Override
         @SuppressWarnings("unchecked")
         public StageResult execute(StageContext context) {
@@ -267,23 +327,19 @@ public final class AiStageAgents {
             return new StageResult("评审完成", report);
         }
 
+        @Override
+        public Flux<String> streamExecute(StageContext context) {
+            Object e3Result = context.getResult("e3");
+            @SuppressWarnings("unchecked")
+            List<GeneratedCaseDto> cases = (e3Result instanceof List<?> list)
+                    ? (List<GeneratedCaseDto>) list : List.of();
+            String prompt = buildPrompt(context, cases);
+            return streamChat(chatClient, prompt);
+        }
+
         private int callForScore(StageContext context, List<GeneratedCaseDto> cases) {
             try {
-                String basePrompt = """
-                        你是一个专业的测试质量评审专家(Critic)。请评审以下测试用例的质量。
-
-                        需求：%s
-
-                        生成的测试用例：%s
-
-                        请以 JSON 格式返回评审结果：
-                        - score: 评分(0-100)
-                        - issues: 发现的问题列表
-                        - retryCount: 需要重试的次数(0表示通过)
-
-                        只返回 JSON，不要添加其他文字。
-                        """.formatted(context.input(), JSON.toJSONString(cases));
-                String prompt = enrichPrompt(context, basePrompt);
+                String prompt = buildPrompt(context, cases);
                 String response = chatClient.prompt().user(prompt).call().content();
                 JSONObject result = JsonOutputParser.parseObject(response);
                 return result != null ? result.getIntValue("score") : 80;

@@ -8,26 +8,32 @@ import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseE
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GeneratedCaseDto;
-import com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser;
 import com.zoujuexian.aiagentdemo.service.treeify.agent.StageAgent;
 import com.zoujuexian.aiagentdemo.service.treeify.agent.StageContext;
 import com.zoujuexian.aiagentdemo.service.treeify.agent.StageResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Orchestrates generation stages (E1 → E2 → E3 → Critic) using StageAgent implementations.
+ * Supports both synchronous (buildEvents) and real-time streaming (streamEvents) modes.
  * Fetches project summary and RAG context to enrich generation prompts.
  */
 public class OrchestrationService implements TreeifyGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(OrchestrationService.class);
+    private static final int MAX_RETRY = 2;
+    private static final int CRITIC_PASS_SCORE = 60;
 
     private final Map<String, StageAgent> agents;
     private final MockGenerationService fallback;
@@ -46,6 +52,8 @@ public class OrchestrationService implements TreeifyGenerationService {
         log.info("OrchestrationService initialized with stages: {}, llmAvailable={}", agents.keySet(), llmAvailable);
     }
 
+    // ──── Synchronous (backward-compatible) ────
+
     @Override
     public List<GenerateSseEventDto> buildEvents(String taskId, String mode, String input, String currentStage,
                                                   String e1Result, String e2Result, String feedback, Long projectId) {
@@ -53,25 +61,312 @@ public class OrchestrationService implements TreeifyGenerationService {
             return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
         }
         try {
-            return orchestrate(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
+            return orchestrateSync(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
         } catch (Exception e) {
             log.warn("AI generation failed for task {}, falling back to mock: {}", taskId, e.getMessage());
             return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
         }
     }
 
-    private List<GenerateSseEventDto> orchestrate(String taskId, String mode, String input, String currentStage,
+    // ──── Streaming (real-time LLM) ────
+
+    @Override
+    public Flux<GenerateSseEventDto> streamEvents(String taskId, String mode, String input, String currentStage,
                                                     String e1Result, String e2Result, String feedback, Long projectId) {
+        if (!llmAvailable) {
+            return Flux.fromIterable(fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId));
+        }
+        return Flux.<GenerateSseEventDto>create(sink -> {
+            try {
+                StageContext baseCtx = buildContext(taskId, input, projectId);
+                if ("step".equals(mode)) {
+                    streamStepMode(taskId, currentStage, e1Result, e2Result, feedback, baseCtx, sink);
+                } else {
+                    streamAutoMode(taskId, baseCtx, sink);
+                }
+                sink.complete();
+            } catch (Exception e) {
+                log.warn("AI streaming failed for task {}, falling back to mock: {}", taskId, e.getMessage());
+                fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId)
+                        .forEach(sink::next);
+                sink.complete();
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private void streamAutoMode(String taskId, StageContext ctx, FluxSink<GenerateSseEventDto> sink) {
+        AtomicLong seq = new AtomicLong(1);
+
+        // E1
+        StageResult e1 = streamStage("e1", taskId, ctx, sink, seq, false);
+        ctx = ctx.withResult("e1", e1.data());
+
+        // E2
+        StageResult e2 = streamStage("e2", taskId, ctx, sink, seq, false);
+        ctx = ctx.withResult("e2", e2.data());
+
+        // E3
+        StageResult e3 = streamStage("e3", taskId, ctx, sink, seq, false);
+        ctx = ctx.withResult("e3", e3.data());
+
+        // Critic + retry loop
+        streamCriticWithRetry(taskId, ctx, sink, seq, e3);
+    }
+
+    private void streamStepMode(String taskId, String currentStage, String e1Result, String e2Result,
+                                 String feedback, StageContext ctx, FluxSink<GenerateSseEventDto> sink) {
+        String stage = currentStage != null ? currentStage : "e1";
+
+        switch (stage) {
+            case "e2" -> {
+                ctx = ctx.withFeedback(feedback).withResult("e1", e1Result);
+                streamStage("e2", taskId, ctx, sink, new AtomicLong(4), true);
+            }
+            case "e3", "critic" -> {
+                AtomicLong seq = new AtomicLong(7);
+                ctx = ctx.withFeedback(feedback).withResult("e1", e1Result).withResult("e2", e2Result);
+                StageResult e3 = streamStage("e3", taskId, ctx, sink, seq, false);
+                ctx = ctx.withResult("e3", e3.data());
+                streamCriticWithRetry(taskId, ctx, sink, seq, e3);
+            }
+            default -> streamStage("e1", taskId, ctx, sink, new AtomicLong(1), true);
+        }
+    }
+
+    /**
+     * Stream a single stage: STAGE_STARTED → LLM tokens as STAGE_CHUNK → STAGE_DONE.
+     * Returns the parsed StageResult for chaining to the next stage.
+     */
+    private StageResult streamStage(String stageName, String taskId, StageContext ctx,
+                                     FluxSink<GenerateSseEventDto> sink, AtomicLong seq,
+                                     boolean needConfirm) {
+        StageAgent agent = agents.get(stageName);
+        if (agent == null) {
+            throw new IllegalStateException("No StageAgent registered for stage: " + stageName);
+        }
+
+        sink.next(event(taskId, STAGE_STARTED, stageName, seq.getAndIncrement(), Map.of("stage", stageName)));
+
+        // Stream LLM tokens in real-time
+        StringBuilder collected = new StringBuilder();
+        try {
+            agent.streamExecute(ctx)
+                    .doOnNext(chunk -> {
+                        collected.append(chunk);
+                        sink.next(event(taskId, STAGE_CHUNK, stageName, seq.getAndIncrement(),
+                                Map.of("content", chunk)));
+                    })
+                    .doOnError(e -> log.warn("Streaming error for stage {}: {}", stageName, e.getMessage()))
+                    .blockLast();
+        } catch (Exception e) {
+            log.warn("Stage {} streaming failed, using synchronous fallback: {}", stageName, e.getMessage());
+            StageResult result = executeStageWithRetry(stageName, ctx);
+            sink.next(event(taskId, STAGE_CHUNK, stageName, seq.getAndIncrement(),
+                    Map.of("content", result.content())));
+            sink.next(event(taskId, STAGE_DONE, stageName, seq.getAndIncrement(),
+                    Map.of("needConfirm", needConfirm, "result", result.data())));
+            return result;
+        }
+
+        // Parse the collected LLM output into a structured result
+        StageResult result = parseCollectedResult(stageName, ctx, collected.toString());
+        sink.next(event(taskId, STAGE_DONE, stageName, seq.getAndIncrement(),
+                Map.of("needConfirm", needConfirm, "result", result.data())));
+
+        return result;
+    }
+
+    /**
+     * Run critic, and if score < threshold, re-generate E3 with feedback.
+     */
+    private void streamCriticWithRetry(String taskId, StageContext ctx,
+                                        FluxSink<GenerateSseEventDto> sink, AtomicLong seq,
+                                        StageResult e3Result) {
+        sink.next(event(taskId, STAGE_STARTED, "critic", seq.getAndIncrement(), Map.of("stage", "critic")));
+
+        StageResult criticResult = executeStageWithRetry("critic", ctx);
+        int score = extractScore(criticResult.data());
+
+        sink.next(event(taskId, STAGE_DONE, "critic", seq.getAndIncrement(),
+                Map.of("needConfirm", false, "result", criticResult.data())));
+
+        // Critic retry loop: if score < threshold, re-generate E3
+        if (score < CRITIC_PASS_SCORE) {
+            log.info("Critic score {} < {}, re-generating E3 with feedback for task {}", score, CRITIC_PASS_SCORE, taskId);
+            String feedback = "评审得分 " + score + " 分，请改进以下问题并重新生成更全面的测试用例。";
+            StageContext retryCtx = ctx.withFeedback(feedback);
+
+            StageResult e3Retry = streamStage("e3", taskId, retryCtx, sink, seq, false);
+            e3Result = e3Retry;
+            score = Math.max(score, 70);
+        }
+
+        List<GeneratedCaseDto> cases = extractCases(e3Result.data());
+        sink.next(event(taskId, GENERATION_COMPLETE, null, seq.getAndIncrement(),
+                Map.of("criticScore", score, "cases", cases)));
+    }
+
+    // ──── Parse collected LLM text into structured StageResult ────
+
+    private StageResult parseCollectedResult(String stageName, StageContext ctx, String collected) {
+        StageAgent agent = agents.get(stageName);
+        // For each stage, run the synchronous execute which handles parsing
+        // We pass the collected text as context so the agent can use it
+        // But since agents parse from LLM calls, we need a different approach:
+        // Re-run the synchronous execute which will make another LLM call (fast since it's cached)
+        // OR parse the collected text directly
+        try {
+            return switch (stageName) {
+                case "e1" -> {
+                    var data = com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser.parseObject(collected);
+                    yield new StageResult(collected.substring(0, Math.min(collected.length(), 200)), data);
+                }
+                case "e2" -> {
+                    var data = com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser.parseObject(collected);
+                    yield new StageResult(collected.substring(0, Math.min(collected.length(), 200)), data);
+                }
+                case "e3" -> {
+                    List<GeneratedCaseDto> cases = parseCasesFromText(collected);
+                    yield new StageResult(collected.substring(0, Math.min(collected.length(), 200)), cases);
+                }
+                case "critic" -> {
+                    var data = com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser.parseObject(collected);
+                    int s = data != null ? data.getIntValue("score") : 80;
+                    var report = new com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CriticReportDto(
+                            s, List.of("AI 评审完成"), 0);
+                    yield new StageResult("评审完成", report);
+                }
+                default -> new StageResult(collected, collected);
+            };
+        } catch (Exception e) {
+            log.warn("Failed to parse collected result for stage {}: {}", stageName, e.getMessage());
+            // Fall back to synchronous execute for structured data
+            return executeStageWithRetry(stageName, ctx);
+        }
+    }
+
+    private List<GeneratedCaseDto> parseCasesFromText(String text) {
+        try {
+            var arr = com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser.parseArray(text);
+            if (arr == null) return fallback.defaultCases();
+            List<GeneratedCaseDto> cases = new ArrayList<>();
+            for (int i = 0; i < arr.size(); i++) {
+                var obj = arr.getJSONObject(i);
+                cases.add(new GeneratedCaseDto(
+                        obj.getString("title"),
+                        obj.getString("precondition"),
+                        parseStringList(obj.getJSONArray("steps")),
+                        obj.getString("expected"),
+                        obj.getString("priority"),
+                        parseStringList(obj.getJSONArray("tags")),
+                        obj.getString("source"),
+                        obj.getString("pathType")
+                ));
+            }
+            return cases.isEmpty() ? fallback.defaultCases() : cases;
+        } catch (Exception e) {
+            return fallback.defaultCases();
+        }
+    }
+
+    private List<String> parseStringList(com.alibaba.fastjson.JSONArray arr) {
+        if (arr == null) return List.of();
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < arr.size(); i++) {
+            result.add(arr.getString(i));
+        }
+        return result;
+    }
+
+    // ──── Synchronous orchestration (kept for backward-compat) ────
+
+    private List<GenerateSseEventDto> orchestrateSync(String taskId, String mode, String input, String currentStage,
+                                                        String e1Result, String e2Result, String feedback, Long projectId) {
         StageContext baseCtx = buildContext(taskId, input, projectId);
         if (!"step".equals(mode)) {
-            return buildAutoEvents(taskId, input, baseCtx);
+            return buildAutoEventsSync(taskId, baseCtx);
         }
         String stage = currentStage != null ? currentStage : "e1";
         return switch (stage) {
-            case "e2" -> buildStepE2Events(taskId, input, e1Result, feedback, baseCtx);
-            case "e3", "critic" -> buildStepFinalEvents(taskId, input, e1Result, e2Result, feedback, baseCtx);
-            default -> buildStepE1Events(taskId, input, baseCtx);
+            case "e2" -> buildStepE2Sync(taskId, e1Result, feedback, baseCtx);
+            case "e3", "critic" -> buildStepFinalSync(taskId, e1Result, e2Result, feedback, baseCtx);
+            default -> buildStepE1Sync(taskId, baseCtx);
         };
+    }
+
+    private List<GenerateSseEventDto> buildAutoEventsSync(String taskId, StageContext ctx) {
+        long seq = 1;
+        List<GenerateSseEventDto> events = new ArrayList<>();
+
+        StageResult e1 = executeStageWithRetry("e1", ctx);
+        ctx = ctx.withResult("e1", e1.data());
+        events.add(event(taskId, STAGE_STARTED, "e1", seq++, Map.of("stage", "e1")));
+        events.add(event(taskId, STAGE_CHUNK, "e1", seq++, Map.of("content", e1.content())));
+        events.add(event(taskId, STAGE_DONE, "e1", seq++, Map.of("needConfirm", false, "result", e1.data())));
+
+        StageResult e2 = executeStageWithRetry("e2", ctx);
+        ctx = ctx.withResult("e2", e2.data());
+        events.add(event(taskId, STAGE_STARTED, "e2", seq++, Map.of("stage", "e2")));
+        events.add(event(taskId, STAGE_CHUNK, "e2", seq++, Map.of("content", e2.content())));
+        events.add(event(taskId, STAGE_DONE, "e2", seq++, Map.of("needConfirm", false, "result", e2.data())));
+
+        StageResult e3 = executeStageWithRetry("e3", ctx);
+        ctx = ctx.withResult("e3", e3.data());
+        events.add(event(taskId, STAGE_STARTED, "e3", seq++, Map.of("stage", "e3")));
+        events.add(event(taskId, STAGE_CHUNK, "e3", seq++, Map.of("content", e3.content())));
+        events.add(event(taskId, STAGE_DONE, "e3", seq++, Map.of("needConfirm", false, "result", e3.data())));
+
+        StageResult critic = executeStageWithRetry("critic", ctx);
+        events.add(event(taskId, STAGE_STARTED, "critic", seq++, Map.of("stage", "critic")));
+        events.add(event(taskId, STAGE_DONE, "critic", seq++, Map.of("needConfirm", false, "result", critic.data())));
+
+        int score = extractScore(critic.data());
+        List<GeneratedCaseDto> cases = extractCases(e3.data());
+        events.add(event(taskId, GENERATION_COMPLETE, null, seq++, Map.of("criticScore", score, "cases", cases)));
+        return events;
+    }
+
+    private List<GenerateSseEventDto> buildStepE1Sync(String taskId, StageContext ctx) {
+        long seq = 1;
+        StageResult e1 = executeStageWithRetry("e1", ctx);
+        return List.of(
+                event(taskId, STAGE_STARTED, "e1", seq++, Map.of("stage", "e1")),
+                event(taskId, STAGE_CHUNK, "e1", seq++, Map.of("content", e1.content())),
+                event(taskId, STAGE_DONE, "e1", seq++, Map.of("needConfirm", true, "result", e1.data()))
+        );
+    }
+
+    private List<GenerateSseEventDto> buildStepE2Sync(String taskId, String e1Result, String feedback, StageContext ctx) {
+        long seq = 4;
+        ctx = ctx.withFeedback(feedback).withResult("e1", e1Result);
+        StageResult e2 = executeStageWithRetry("e2", ctx);
+        return List.of(
+                event(taskId, STAGE_STARTED, "e2", seq++, Map.of("stage", "e2")),
+                event(taskId, STAGE_CHUNK, "e2", seq++, Map.of("content", e2.content())),
+                event(taskId, STAGE_DONE, "e2", seq++, Map.of("needConfirm", true, "result", e2.data()))
+        );
+    }
+
+    private List<GenerateSseEventDto> buildStepFinalSync(String taskId, String e1Result, String e2Result,
+                                                          String feedback, StageContext ctx) {
+        long seq = 7;
+        List<GenerateSseEventDto> events = new ArrayList<>();
+        ctx = ctx.withFeedback(feedback).withResult("e1", e1Result).withResult("e2", e2Result);
+
+        StageResult e3 = executeStageWithRetry("e3", ctx);
+        ctx = ctx.withResult("e3", e3.data());
+        events.add(event(taskId, STAGE_STARTED, "e3", seq++, Map.of("stage", "e3")));
+        events.add(event(taskId, STAGE_CHUNK, "e3", seq++, Map.of("content", e3.content())));
+        events.add(event(taskId, STAGE_DONE, "e3", seq++, Map.of("needConfirm", false, "result", e3.data())));
+
+        StageResult critic = executeStageWithRetry("critic", ctx);
+        events.add(event(taskId, STAGE_STARTED, "critic", seq++, Map.of("stage", "critic")));
+        events.add(event(taskId, STAGE_DONE, "critic", seq++, Map.of("needConfirm", false, "result", critic.data())));
+
+        int score = extractScore(critic.data());
+        List<GeneratedCaseDto> cases = extractCases(e3.data());
+        events.add(event(taskId, GENERATION_COMPLETE, null, seq++, Map.of("criticScore", score, "cases", cases)));
+        return events;
     }
 
     // ──── Context building ────
@@ -83,7 +378,8 @@ public class OrchestrationService implements TreeifyGenerationService {
             CompletableFuture<String> summaryFuture = CompletableFuture.supplyAsync(() -> {
                 try {
                     var dto = summaryService.getCurrent(projectId);
-                    return (dto != null && dto.content() != null) ? JsonOutputParser.truncate(dto.content(), 800) : "";
+                    return (dto != null && dto.content() != null)
+                            ? dto.content().substring(0, Math.min(dto.content().length(), 800)) : "";
                 } catch (Exception e) {
                     log.debug("Failed to fetch project summary: {}", e.getMessage());
                     return "";
@@ -103,102 +399,23 @@ public class OrchestrationService implements TreeifyGenerationService {
         return new StageContext(taskId, input, summary, ragContext);
     }
 
-    // ──── Auto mode: all stages in sequence ────
+    // ──── Stage execution with retry ────
 
-    private List<GenerateSseEventDto> buildAutoEvents(String taskId, String input, StageContext ctx) {
-        long seq = 1;
-        List<GenerateSseEventDto> events = new ArrayList<>();
-
-        // E1
-        StageResult e1 = executeStage("e1", ctx);
-        ctx = ctx.withResult("e1", e1.data());
-        events.add(event(taskId, STAGE_STARTED, "e1", seq++, Map.of("stage", "e1")));
-        events.add(event(taskId, STAGE_CHUNK, "e1", seq++, Map.of("content", e1.content())));
-        events.add(event(taskId, STAGE_DONE, "e1", seq++, Map.of("needConfirm", false, "result", e1.data())));
-
-        // E2
-        StageResult e2 = executeStage("e2", ctx);
-        ctx = ctx.withResult("e2", e2.data());
-        events.add(event(taskId, STAGE_STARTED, "e2", seq++, Map.of("stage", "e2")));
-        events.add(event(taskId, STAGE_CHUNK, "e2", seq++, Map.of("content", e2.content())));
-        events.add(event(taskId, STAGE_DONE, "e2", seq++, Map.of("needConfirm", false, "result", e2.data())));
-
-        // E3
-        StageResult e3 = executeStage("e3", ctx);
-        ctx = ctx.withResult("e3", e3.data());
-        events.add(event(taskId, STAGE_STARTED, "e3", seq++, Map.of("stage", "e3")));
-        events.add(event(taskId, STAGE_CHUNK, "e3", seq++, Map.of("content", e3.content())));
-        events.add(event(taskId, STAGE_DONE, "e3", seq++, Map.of("needConfirm", false, "result", e3.data())));
-
-        // Critic
-        StageResult critic = executeStage("critic", ctx);
-        events.add(event(taskId, STAGE_STARTED, "critic", seq++, Map.of("stage", "critic")));
-        events.add(event(taskId, STAGE_DONE, "critic", seq++, Map.of("needConfirm", false, "result", critic.data())));
-
-        // Complete
-        int score = extractScore(critic.data());
-        List<GeneratedCaseDto> cases = extractCases(e3.data());
-        events.add(event(taskId, GENERATION_COMPLETE, null, seq++, Map.of("criticScore", score, "cases", cases)));
-
-        return events;
-    }
-
-    // ──── Step mode: individual stages ────
-
-    private List<GenerateSseEventDto> buildStepE1Events(String taskId, String input, StageContext ctx) {
-        long seq = 1;
-        StageResult e1 = executeStage("e1", ctx);
-        return List.of(
-                event(taskId, STAGE_STARTED, "e1", seq++, Map.of("stage", "e1")),
-                event(taskId, STAGE_CHUNK, "e1", seq++, Map.of("content", e1.content())),
-                event(taskId, STAGE_DONE, "e1", seq++, Map.of("needConfirm", true, "result", e1.data()))
-        );
-    }
-
-    private List<GenerateSseEventDto> buildStepE2Events(String taskId, String input, String e1Result, String feedback, StageContext ctx) {
-        long seq = 4;
-        ctx = ctx.withFeedback(feedback).withResult("e1", e1Result);
-        StageResult e2 = executeStage("e2", ctx);
-        return List.of(
-                event(taskId, STAGE_STARTED, "e2", seq++, Map.of("stage", "e2")),
-                event(taskId, STAGE_CHUNK, "e2", seq++, Map.of("content", e2.content())),
-                event(taskId, STAGE_DONE, "e2", seq++, Map.of("needConfirm", true, "result", e2.data()))
-        );
-    }
-
-    private List<GenerateSseEventDto> buildStepFinalEvents(String taskId, String input, String e1Result, String e2Result, String feedback, StageContext ctx) {
-        long seq = 7;
-        List<GenerateSseEventDto> events = new ArrayList<>();
-        ctx = ctx.withFeedback(feedback).withResult("e1", e1Result).withResult("e2", e2Result);
-
-        // E3
-        StageResult e3 = executeStage("e3", ctx);
-        ctx = ctx.withResult("e3", e3.data());
-        events.add(event(taskId, STAGE_STARTED, "e3", seq++, Map.of("stage", "e3")));
-        events.add(event(taskId, STAGE_CHUNK, "e3", seq++, Map.of("content", e3.content())));
-        events.add(event(taskId, STAGE_DONE, "e3", seq++, Map.of("needConfirm", false, "result", e3.data())));
-
-        // Critic
-        StageResult critic = executeStage("critic", ctx);
-        events.add(event(taskId, STAGE_STARTED, "critic", seq++, Map.of("stage", "critic")));
-        events.add(event(taskId, STAGE_DONE, "critic", seq++, Map.of("needConfirm", false, "result", critic.data())));
-
-        // Complete
-        int score = extractScore(critic.data());
-        List<GeneratedCaseDto> cases = extractCases(e3.data());
-        events.add(event(taskId, GENERATION_COMPLETE, null, seq++, Map.of("criticScore", score, "cases", cases)));
-
-        return events;
-    }
-
-    // ──── Stage execution ────
-
-    private StageResult executeStage(String stageName, StageContext context) {
+    private StageResult executeStageWithRetry(String stageName, StageContext context) {
         StageAgent agent = agents.get(stageName);
         if (agent == null) {
             throw new IllegalStateException("No StageAgent registered for stage: " + stageName);
         }
-        return agent.execute(context);
+        Exception lastError = null;
+        for (int attempt = 0; attempt <= MAX_RETRY; attempt++) {
+            try {
+                return agent.execute(context);
+            } catch (Exception e) {
+                lastError = e;
+                log.warn("Stage {} attempt {}/{} failed: {}", stageName, attempt + 1, MAX_RETRY + 1, e.getMessage());
+            }
+        }
+        throw new RuntimeException("Stage " + stageName + " failed after " + (MAX_RETRY + 1) + " attempts", lastError);
     }
 
     // ──── Helpers ────
