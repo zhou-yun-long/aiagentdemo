@@ -1,31 +1,37 @@
 package com.zoujuexian.aiagentdemo.service.treeify.agent;
 
-import java.util.List;
 import java.util.Map;
 
 /**
  * Context passed between generation stages.
- * Carries forward results from previous stages and user feedback.
+ * Carries forward results from previous stages, user feedback,
+ * and project-level context (summary + RAG).
  */
 public record StageContext(
         String taskId,
         String input,
         String feedback,
-        Map<String, Object> stageResults
+        Map<String, Object> stageResults,
+        String projectSummary,
+        String ragContext
 ) {
 
     public StageContext(String taskId, String input) {
-        this(taskId, input, null, Map.of());
+        this(taskId, input, null, Map.of(), null, null);
+    }
+
+    public StageContext(String taskId, String input, String projectSummary, String ragContext) {
+        this(taskId, input, null, Map.of(), projectSummary, ragContext);
     }
 
     public StageContext withFeedback(String feedback) {
-        return new StageContext(taskId, input, feedback, stageResults);
+        return new StageContext(taskId, input, feedback, stageResults, projectSummary, ragContext);
     }
 
     public StageContext withResult(String stage, Object result) {
         Map<String, Object> updated = new java.util.LinkedHashMap<>(stageResults);
         updated.put(stage, result);
-        return new StageContext(taskId, input, feedback, updated);
+        return new StageContext(taskId, input, feedback, updated, projectSummary, ragContext);
     }
 
     public Object getResult(String stage) {

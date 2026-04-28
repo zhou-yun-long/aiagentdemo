@@ -25,7 +25,7 @@ public class MockGenerationService implements TreeifyGenerationService {
 
     @Override
     public List<GenerateSseEventDto> buildEvents(String taskId, String mode, String input, String currentStage,
-                                                  String e1Result, String e2Result, String feedback) {
+                                                  String e1Result, String e2Result, String feedback, Long projectId) {
         MockScenario scenario = resolveScenario(input);
         if (!"step".equals(mode)) {
             return buildAutoGenerateEvents(taskId, scenario);

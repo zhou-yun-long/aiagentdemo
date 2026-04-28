@@ -21,7 +21,7 @@ import java.util.Map;
 
 /**
  * Orchestrates generation stages (E1 → E2 → E3 → Critic) using StageAgent implementations.
- * Replaces the monolithic AiTreeifyGenerationService with composable stage execution.
+ * Fetches project summary and RAG context to enrich generation prompts.
  */
 public class OrchestrationService implements TreeifyGenerationService {
 
@@ -29,48 +29,77 @@ public class OrchestrationService implements TreeifyGenerationService {
 
     private final Map<String, StageAgent> agents;
     private final MockGenerationService fallback;
+    private final SummaryService summaryService;
+    private final KnowledgeService knowledgeService;
     private final boolean llmAvailable;
 
-    public OrchestrationService(Map<String, StageAgent> agents, MockGenerationService fallback, String apiKey) {
+    public OrchestrationService(Map<String, StageAgent> agents, MockGenerationService fallback,
+                                 SummaryService summaryService, KnowledgeService knowledgeService,
+                                 String apiKey) {
         this.agents = agents;
         this.fallback = fallback;
+        this.summaryService = summaryService;
+        this.knowledgeService = knowledgeService;
         this.llmAvailable = apiKey != null && !apiKey.isBlank() && !"test".equals(apiKey);
         log.info("OrchestrationService initialized with stages: {}, llmAvailable={}", agents.keySet(), llmAvailable);
     }
 
     @Override
     public List<GenerateSseEventDto> buildEvents(String taskId, String mode, String input, String currentStage,
-                                                  String e1Result, String e2Result, String feedback) {
+                                                  String e1Result, String e2Result, String feedback, Long projectId) {
         if (!llmAvailable) {
-            return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback);
+            return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
         }
         try {
-            return orchestrate(taskId, mode, input, currentStage, e1Result, e2Result, feedback);
+            return orchestrate(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
         } catch (Exception e) {
             log.warn("AI generation failed for task {}, falling back to mock: {}", taskId, e.getMessage());
-            return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback);
+            return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
         }
     }
 
     private List<GenerateSseEventDto> orchestrate(String taskId, String mode, String input, String currentStage,
-                                                    String e1Result, String e2Result, String feedback) {
+                                                    String e1Result, String e2Result, String feedback, Long projectId) {
+        StageContext baseCtx = buildContext(taskId, input, projectId);
         if (!"step".equals(mode)) {
-            return buildAutoEvents(taskId, input);
+            return buildAutoEvents(taskId, input, baseCtx);
         }
         String stage = currentStage != null ? currentStage : "e1";
         return switch (stage) {
-            case "e2" -> buildStepE2Events(taskId, input, e1Result, feedback);
-            case "e3", "critic" -> buildStepFinalEvents(taskId, input, e1Result, e2Result, feedback);
-            default -> buildStepE1Events(taskId, input);
+            case "e2" -> buildStepE2Events(taskId, input, e1Result, feedback, baseCtx);
+            case "e3", "critic" -> buildStepFinalEvents(taskId, input, e1Result, e2Result, feedback, baseCtx);
+            default -> buildStepE1Events(taskId, input, baseCtx);
         };
+    }
+
+    // ──── Context building ────
+
+    private StageContext buildContext(String taskId, String input, Long projectId) {
+        String summary = "";
+        String ragContext = "";
+        if (projectId != null) {
+            try {
+                var summaryDto = summaryService.getCurrent(projectId);
+                if (summaryDto != null && summaryDto.content() != null) {
+                    summary = truncate(summaryDto.content(), 800);
+                }
+            } catch (Exception e) {
+                log.debug("Failed to fetch project summary: {}", e.getMessage());
+            }
+            try {
+                ragContext = knowledgeService.buildRagContext(projectId, input, 1500);
+            } catch (Exception e) {
+                log.debug("Failed to build RAG context: {}", e.getMessage());
+            }
+        }
+        return new StageContext(taskId, input, summary, ragContext);
     }
 
     // ──── Auto mode: all stages in sequence ────
 
-    private List<GenerateSseEventDto> buildAutoEvents(String taskId, String input) {
+    private List<GenerateSseEventDto> buildAutoEvents(String taskId, String input, StageContext ctx) {
         long seq = 1;
         List<GenerateSseEventDto> events = new ArrayList<>();
-        StageContext ctx = new StageContext(taskId, input);
 
         // E1
         StageResult e1 = executeStage("e1", ctx);
@@ -108,9 +137,9 @@ public class OrchestrationService implements TreeifyGenerationService {
 
     // ──── Step mode: individual stages ────
 
-    private List<GenerateSseEventDto> buildStepE1Events(String taskId, String input) {
+    private List<GenerateSseEventDto> buildStepE1Events(String taskId, String input, StageContext ctx) {
         long seq = 1;
-        StageResult e1 = executeStage("e1", new StageContext(taskId, input));
+        StageResult e1 = executeStage("e1", ctx);
         return List.of(
                 event(taskId, STAGE_STARTED, "e1", seq++, Map.of("stage", "e1")),
                 event(taskId, STAGE_CHUNK, "e1", seq++, Map.of("content", e1.content())),
@@ -118,11 +147,9 @@ public class OrchestrationService implements TreeifyGenerationService {
         );
     }
 
-    private List<GenerateSseEventDto> buildStepE2Events(String taskId, String input, String e1Result, String feedback) {
+    private List<GenerateSseEventDto> buildStepE2Events(String taskId, String input, String e1Result, String feedback, StageContext ctx) {
         long seq = 4;
-        StageContext ctx = new StageContext(taskId, input)
-                .withFeedback(feedback)
-                .withResult("e1", e1Result);
+        ctx = ctx.withFeedback(feedback).withResult("e1", e1Result);
         StageResult e2 = executeStage("e2", ctx);
         return List.of(
                 event(taskId, STAGE_STARTED, "e2", seq++, Map.of("stage", "e2")),
@@ -131,13 +158,10 @@ public class OrchestrationService implements TreeifyGenerationService {
         );
     }
 
-    private List<GenerateSseEventDto> buildStepFinalEvents(String taskId, String input, String e1Result, String e2Result, String feedback) {
+    private List<GenerateSseEventDto> buildStepFinalEvents(String taskId, String input, String e1Result, String e2Result, String feedback, StageContext ctx) {
         long seq = 7;
         List<GenerateSseEventDto> events = new ArrayList<>();
-        StageContext ctx = new StageContext(taskId, input)
-                .withFeedback(feedback)
-                .withResult("e1", e1Result)
-                .withResult("e2", e2Result);
+        ctx = ctx.withFeedback(feedback).withResult("e1", e1Result).withResult("e2", e2Result);
 
         // E3
         StageResult e3 = executeStage("e3", ctx);
@@ -184,6 +208,11 @@ public class OrchestrationService implements TreeifyGenerationService {
             return report.score();
         }
         return 80;
+    }
+
+    private String truncate(String s, int maxLen) {
+        if (s == null) return "";
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
     }
 
     private GenerateSseEventDto event(String taskId, GenerateSseEventName type, String stage, long sequence, Object payload) {

@@ -320,9 +320,18 @@ public class ConfirmGenerateTaskRequest {
 
 ---
 
-### 3.6 P1-6：摘要 Agent / RAG
+### 3.6 P1-6：摘要 Agent / RAG ✅ 已完成（H2 + 关键词搜索）
 
 **目标**：实现项目摘要生成、PRD 文档上传、项目级 RAG 检索。
+
+**完成状态**：采用 H2 + 关键词搜索策略（非 pgvector），核心链路已实现：
+- `TreeifyProjectSummary` 实体 + 版本管理 + 回滚
+- `TreeifyKnowledgeDocument` 实体 + 关键词搜索
+- `SummaryService`：LLM 摘要生成 + mock fallback
+- `KnowledgeService`：文档 CRUD + 关键词检索 + RAG 上下文构建
+- `SummaryController` / `KnowledgeController`：8 个 API 端点
+- `OrchestrationService` 自动注入项目摘要和 RAG 上下文到各阶段 prompt
+- 未实现：PDF/DOCX 解析、pgvector 语义检索、前端管理面板
 
 **涉及前端文件**：
 

@@ -47,16 +47,16 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
 
     @Override
     public List<GenerateSseEventDto> buildEvents(String taskId, String mode, String input, String currentStage,
-                                                  String e1Result, String e2Result, String feedback) {
+                                                  String e1Result, String e2Result, String feedback, Long projectId) {
         if (!llmAvailable) {
             log.debug("LLM not available, falling back to mock generation for task {}", taskId);
-            return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback);
+            return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
         }
         try {
             return buildAiEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback);
         } catch (Exception e) {
             log.warn("AI generation failed for task {}, falling back to mock: {}", taskId, e.getMessage());
-            return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback);
+            return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
         }
     }
 

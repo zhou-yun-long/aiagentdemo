@@ -701,30 +701,51 @@ AI 生成链路**已重构**为 `OrchestrationService` + 可配置 `StageAgent` 
 
 `OrchestrationService` 实现 `TreeifyGenerationService`，编排 auto/step 两种模式的阶段执行。`TreeifyGenerationConfig` 在 AI 模式下创建 `OrchestrationService` 替代原 `AiTreeifyGenerationService`。Mock 链路不受影响。
 
-### 11.7 真实 AI 需有效 API Key
+### 11.7 摘要 Agent / RAG（P1-6 已完成，H2 + 关键词搜索）
+
+项目摘要和知识库检索**已实现**，生成 prompt 自动注入项目背景和参考资料。
+
+**实现方式**：
+- `TreeifyProjectSummary` 实体存储摘要版本，支持生成/历史/回滚
+- `TreeifyKnowledgeDocument` 实体存储知识文档，H2 LIKE 关键词搜索
+- `OrchestrationService.buildContext()` 在生成前自动拉取当前摘要和 RAG 上下文
+- `AiStageAgents.enrichPrompt()` 在各阶段 prompt 前注入【项目背景】和【参考资料】
+- `SummaryService` 调用 LLM 生成摘要，失败时 mock fallback
+- `KnowledgeService.buildRagContext()` 关键词检索知识库，截断到 1500 字符
+
+**API 端点**：
+- `GET/POST /projects/{id}/summary` — 摘要查询/生成
+- `GET /projects/{id}/summary/history` — 版本历史
+- `POST /projects/{id}/summary/rollback/{version}` — 回滚
+- `POST/GET/DELETE /projects/{id}/knowledge` — 知识文档 CRUD
+- `POST /projects/{id}/knowledge/search` — 关键词检索
+
+**未实现**：PDF/DOCX 文件解析、pgvector 语义检索、前端管理面板
+
+### 11.8 真实 AI 需有效 API Key
 
 AI 模式依赖有效的 `OPENAI_API_KEY` 和可访问的 `OPENAI_BASE_URL`。任一不可用会降级为 Mock。
 
-### 11.8 H2 文件数据库
+### 11.9 H2 文件数据库
 
 - 单实例访问（文件锁），不适合多实例部署
 - 数据文件 `data/treeify.mv.db` 需挂载卷持久化
 - Docker `down -v` 会删除数据
 
-### 11.9 Spring AI 里程碑版本
+### 11.10 Spring AI 里程碑版本
 
 - `spring-ai` 版本 `2.0.0-M4`（Milestone），API 可能变动
 - Spring Boot `4.0.5`，前沿版本
 
-### 11.10 脑图与用例非强绑定
+### 11.11 脑图与用例非强绑定
 
 脑图节点通过 `caseId` 关联测试用例，但二者独立 CRUD。脑图保存后若单独删除用例，节点不自动同步。
 
-### 11.11 无分页
+### 11.12 无分页
 
 项目和用例列表 API 无分页，大量数据时性能需关注。
 
-### 11.12 无用户认证
+### 11.13 无用户认证
 
 系统当前无用户认证/授权机制，所有 API 可以匿名访问。
 

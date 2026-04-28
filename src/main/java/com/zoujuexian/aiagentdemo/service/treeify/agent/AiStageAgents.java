@@ -16,10 +16,30 @@ import java.util.List;
 /**
  * AI-powered StageAgent implementations.
  * Each agent handles prompt construction, LLM call, and response parsing for one stage.
+ * Prompts are enriched with project summary and RAG context when available.
  */
 public final class AiStageAgents {
 
+    private static final Logger log = LoggerFactory.getLogger(AiStageAgents.class);
+
     private AiStageAgents() {}
+
+    /**
+     * Prepend project summary and RAG context to a prompt.
+     */
+    private static String enrichPrompt(StageContext ctx, String basePrompt) {
+        StringBuilder sb = new StringBuilder();
+        String summary = ctx.projectSummary();
+        String rag = ctx.ragContext();
+        if (summary != null && !summary.isBlank()) {
+            sb.append("【项目背景】\n").append(summary).append("\n\n");
+        }
+        if (rag != null && !rag.isBlank()) {
+            sb.append("【参考资料】\n").append(rag).append("\n\n");
+        }
+        sb.append(basePrompt);
+        return sb.toString();
+    }
 
     // ──── E1: Requirements Analysis ────
 
@@ -35,7 +55,7 @@ public final class AiStageAgents {
 
         @Override
         public StageResult execute(StageContext context) {
-            String prompt = """
+            String basePrompt = """
                     你是一个专业的测试分析师。请根据以下需求，提取业务目标、用户动作、系统行为和约束条件。
 
                     需求：%s
@@ -48,6 +68,7 @@ public final class AiStageAgents {
 
                     只返回 JSON，不要添加其他文字。
                     """.formatted(context.input());
+            String prompt = enrichPrompt(context, basePrompt);
             JSONObject result = callAndParse(prompt);
             return new StageResult("正在解析需求目标、用户动作和系统约束...", result);
         }
@@ -73,18 +94,19 @@ public final class AiStageAgents {
         @Override
         public StageResult execute(StageContext context) {
             String e1ResultJson = context.getResultJson("e1");
-            String prompt;
+            String basePrompt;
             if (e1ResultJson != null && !e1ResultJson.isBlank()) {
                 try {
                     JSONObject e1 = JsonOutputParser.parseObject(e1ResultJson);
-                    prompt = buildPrompt(context.input(), e1 != null ? e1.toJSONString() : null);
+                    basePrompt = buildPrompt(context.input(), e1 != null ? e1.toJSONString() : null);
                 } catch (Exception e) {
-                    prompt = buildPromptFromInput(context.input());
+                    basePrompt = buildPromptFromInput(context.input());
                 }
             } else {
-                prompt = buildPromptFromInput(context.input());
+                basePrompt = buildPromptFromInput(context.input());
             }
-            prompt = appendFeedback(prompt, context.feedback());
+            basePrompt = appendFeedback(basePrompt, context.feedback());
+            String prompt = enrichPrompt(context, basePrompt);
             JSONObject result = callAndParse(prompt);
             return new StageResult("正在拆分可测试对象...", result);
         }
@@ -152,13 +174,14 @@ public final class AiStageAgents {
         public StageResult execute(StageContext context) {
             Object e1 = JsonOutputParser.safeParse(context.getResultJson("e1"));
             Object e2 = JsonOutputParser.safeParse(context.getResultJson("e2"));
-            String prompt;
+            String basePrompt;
             if (e1 != null || e2 != null) {
-                prompt = buildPrompt(context.input(), stringify(e1), stringify(e2));
+                basePrompt = buildPrompt(context.input(), stringify(e1), stringify(e2));
             } else {
-                prompt = buildPromptFromInput(context.input());
+                basePrompt = buildPromptFromInput(context.input());
             }
-            prompt = appendFeedback(prompt, context.feedback());
+            basePrompt = appendFeedback(basePrompt, context.feedback());
+            String prompt = enrichPrompt(context, basePrompt);
             List<GeneratedCaseDto> cases = callAndParseCases(prompt);
             return new StageResult("正在生成测试用例...", cases);
         }
@@ -282,14 +305,14 @@ public final class AiStageAgents {
             } else {
                 cases = List.of();
             }
-            int score = callForScore(context.input(), cases);
+            int score = callForScore(context, cases);
             var report = new CriticReportDto(score, List.of("AI 生成的用例覆盖了主要路径"), 0);
             return new StageResult("评审完成", report);
         }
 
-        private int callForScore(String input, List<GeneratedCaseDto> cases) {
+        private int callForScore(StageContext context, List<GeneratedCaseDto> cases) {
             try {
-                String prompt = """
+                String basePrompt = """
                         你是一个专业的测试质量评审专家(Critic)。请评审以下测试用例的质量。
 
                         需求：%s
@@ -302,7 +325,8 @@ public final class AiStageAgents {
                         - retryCount: 需要重试的次数(0表示通过)
 
                         只返回 JSON，不要添加其他文字。
-                        """.formatted(input, JSON.toJSONString(cases));
+                        """.formatted(context.input(), JSON.toJSONString(cases));
+                String prompt = enrichPrompt(context, basePrompt);
                 String response = chatClient.prompt().user(prompt).call().content();
                 JSONObject result = JsonOutputParser.parseObject(response);
                 return result != null ? result.getIntValue("score") : 80;

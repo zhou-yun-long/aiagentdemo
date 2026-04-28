@@ -391,7 +391,7 @@ public class TreeifyPersistenceService {
 
     // ──── Entity helpers ────
 
-    private TreeifyProject findProject(Long projectId) {
+    public TreeifyProject findProject(Long projectId) {
         return projectRepo.findById(projectId)
                 .orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "项目不存在: " + projectId));
     }

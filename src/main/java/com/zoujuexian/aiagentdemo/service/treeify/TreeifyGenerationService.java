@@ -19,8 +19,9 @@ public interface TreeifyGenerationService {
      * @param e1Result     persisted E1 result JSON (null for first stage)
      * @param e2Result     persisted E2 result JSON (null for first/second stage)
      * @param feedback     user feedback from confirm step (null if none)
+     * @param projectId    project ID for fetching summary/RAG context (null to skip)
      * @return ordered SSE events to emit via the stream endpoint
      */
     List<GenerateSseEventDto> buildEvents(String taskId, String mode, String input, String currentStage,
-                                          String e1Result, String e2Result, String feedback);
+                                          String e1Result, String e2Result, String feedback, Long projectId);
 }

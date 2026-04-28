@@ -54,7 +54,7 @@ public class GenerateController {
         String input = treeifyService.getTaskInput(taskId);
         return Flux.fromIterable(generationService.buildEvents(
                         taskId, task.mode(), input, task.currentStage(),
-                        task.e1Result(), task.e2Result(), task.feedback()))
+                        task.e1Result(), task.e2Result(), task.feedback(), task.projectId()))
                 .delayElements(Duration.ofMillis(350))
                 .doOnNext(treeifyService::applyEvent)
                 .map(event -> ServerSentEvent.<GenerateSseEventDto>builder()
