@@ -281,6 +281,7 @@ textarea {
   display: grid;
   grid-template-columns: 236px minmax(760px, 1fr) 380px;
   height: calc(100vh - 112px);
+  position: relative;
 }
 
 .app:has(.read-only-banner) .workspace {
@@ -703,6 +704,12 @@ textarea {
   display: flex;
   flex-direction: column;
   width: 380px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 8;
+  box-shadow: var(--shadow);
 }
 
 .assistant-body {
@@ -1516,12 +1523,9 @@ button.small:disabled {
     grid-template-columns: 220px minmax(720px, 1fr);
   }
 
-  .assistant-panel.open,
-  .summary-panel.open,
-  .knowledge-panel.open,
-  .snapshot-panel.open {
+  .assistant-panel.open {
     position: absolute;
-    top: 112px;
+    top: 0;
     right: 0;
     bottom: 0;
     z-index: 8;
@@ -1616,6 +1620,12 @@ button.small:disabled {
   display: flex;
   flex-direction: column;
   width: 380px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 8;
+  box-shadow: var(--shadow);
 }
 
 .share-content {
@@ -1711,6 +1721,12 @@ button.small:disabled {
   display: flex;
   flex-direction: column;
   width: 380px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 8;
+  box-shadow: var(--shadow);
 }
 
 .panel-section {
