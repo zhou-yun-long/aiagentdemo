@@ -3,6 +3,7 @@ import { executionStatusLabels, priorityOptions, type ExecutionStatus, type Mind
 type SelectionBarProps = {
   node?: MindNode;
   lastSnapshotAt?: string;
+  readOnly?: boolean;
   onUpdate: (id: string, patch: Partial<MindNode>) => void;
   onAddChild: () => void;
   onDelete: () => void;
@@ -15,7 +16,7 @@ function parseTags(value: string) {
     .filter(Boolean);
 }
 
-export function SelectionBar({ node, lastSnapshotAt, onUpdate, onAddChild, onDelete }: SelectionBarProps) {
+export function SelectionBar({ node, lastSnapshotAt, readOnly, onUpdate, onAddChild, onDelete }: SelectionBarProps) {
   if (!node) {
     return (
       <div className="selection-bar">
@@ -27,6 +28,24 @@ export function SelectionBar({ node, lastSnapshotAt, onUpdate, onAddChild, onDel
 
   const isRoot = node.kind === 'root';
   const canExecute = node.kind === 'case';
+
+  if (readOnly) {
+    return (
+      <div className="selection-bar">
+        <span>当前节点</span>
+        <strong>{node.title}</strong>
+        {node.priority && <span className={`priority ${node.priority.toLowerCase()}`}>{node.priority}</span>}
+        {canExecute && node.executionStatus && (
+          <span className={`execution-chip ${node.executionStatus}`}>
+            {executionStatusLabels[node.executionStatus]}
+          </span>
+        )}
+        {node.tags && node.tags.length > 0 && (
+          <span>{node.tags.join(', ')}</span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="selection-bar editable">

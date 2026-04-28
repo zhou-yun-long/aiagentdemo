@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AiAssistantPanel } from './components/AiAssistantPanel';
 import { KnowledgePanel } from './components/KnowledgePanel';
 import { MindMapCanvas } from './components/MindMapCanvas';
 import { OutlinePanel } from './components/OutlinePanel';
 import { SelectionBar } from './components/SelectionBar';
+import { SharePanel } from './components/SharePanel';
 import { SnapshotPanel } from './components/SnapshotPanel';
 import { SummaryPanel } from './components/SummaryPanel';
 import { Toolbar } from './components/Toolbar';
@@ -44,6 +45,7 @@ export default function App() {
   const nodes = useWorkspaceStore((state) => state.nodes);
   const serverStats = useWorkspaceStore((state) => state.serverStats);
   const theme = useWorkspaceStore((state) => state.theme);
+  const readOnly = useWorkspaceStore((state) => state.readOnly);
   const selectedId = useWorkspaceStore((state) => state.selectedId);
   const assistantOpen = useWorkspaceStore((state) => state.assistantOpen);
   const outlineOpen = useWorkspaceStore((state) => state.outlineOpen);
@@ -77,6 +79,8 @@ export default function App() {
   const appendAiRows = useWorkspaceStore((state) => state.appendAiRows);
   const setNodes = useWorkspaceStore((state) => state.setNodes);
 
+  const [shareOpen, setShareOpen] = useState(false);
+
   const { pageStatus, pageError } = useProjectLoader();
   const { save, saving, saveResult } = useMindmapSave();
   useCasePersistence();
@@ -98,9 +102,15 @@ export default function App() {
 
   return (
     <div className={`app ${theme}`}>
+      {readOnly && (
+        <div className="read-only-banner">
+          只读模式 — 当前为分享视图，无法编辑
+        </div>
+      )}
       <Toolbar
         stats={stats}
         theme={theme}
+        readOnly={readOnly}
         assistantOpen={assistantOpen}
         onToggleAssistant={toggleAssistant}
         summaryOpen={summaryOpen}
@@ -116,12 +126,13 @@ export default function App() {
         onMoveUp={() => moveSelectedNode('up')}
         onMoveDown={() => moveSelectedNode('down')}
         onExportCases={handleExportCases}
+        onToggleShare={() => setShareOpen((v) => !v)}
         dirty={dirty}
         saving={saving}
         saveResult={saveResult}
         onSave={save}
       />
-      <div className={`workspace ${assistantOpen ? '' : 'assistant-closed'} ${outlineOpen ? '' : 'outline-hidden'} ${summaryOpen ? 'summary-open' : ''} ${knowledgeOpen ? 'knowledge-open' : ''} ${snapshotOpen ? 'snapshot-open' : ''}`}>
+      <div className={`workspace ${assistantOpen && !readOnly ? '' : 'assistant-closed'} ${outlineOpen ? '' : 'outline-hidden'} ${summaryOpen ? 'summary-open' : ''} ${knowledgeOpen ? 'knowledge-open' : ''} ${snapshotOpen ? 'snapshot-open' : ''}`}>
         {outlineOpen && <OutlinePanel nodes={nodes} selectedId={selectedId} onSelect={selectNode} onClose={toggleOutline} />}
         <section className="work-area">
           {pageStatus === 'loading' ? (
@@ -143,6 +154,7 @@ export default function App() {
                 selectedId={selectedId}
                 zoom={zoom}
                 outlineOpen={outlineOpen}
+                readOnly={readOnly}
                 onSelect={selectNode}
                 onZoomIn={() => setZoom(zoom + 0.1)}
                 onZoomOut={() => setZoom(zoom - 0.1)}
@@ -154,6 +166,7 @@ export default function App() {
               <SelectionBar
                 node={selectedNode}
                 lastSnapshotAt={lastSnapshotAt}
+                readOnly={readOnly}
                 onUpdate={updateNode}
                 onAddChild={addChildNode}
                 onDelete={deleteSelectedNode}
@@ -161,12 +174,14 @@ export default function App() {
             </>
           )}
         </section>
-        <AiAssistantPanel
-          open={assistantOpen}
-          selectedNode={selectedNode}
-          onClose={closeAssistant}
-          onImportRows={appendAiRows}
-        />
+        {!readOnly && (
+          <AiAssistantPanel
+            open={assistantOpen}
+            selectedNode={selectedNode}
+            onClose={closeAssistant}
+            onImportRows={appendAiRows}
+          />
+        )}
         <SummaryPanel
           open={summaryOpen}
           projectId={currentProjectId ?? getDefaultProjectId()}
@@ -177,13 +192,22 @@ export default function App() {
           projectId={currentProjectId ?? getDefaultProjectId()}
           onClose={closeKnowledge}
         />
-        <SnapshotPanel
-          open={snapshotOpen}
-          projectId={currentProjectId ?? getDefaultProjectId()}
-          nodes={nodes}
-          onClose={closeSnapshot}
-          onRestore={handleSnapshotRestore}
-        />
+        {!readOnly && (
+          <SnapshotPanel
+            open={snapshotOpen}
+            projectId={currentProjectId ?? getDefaultProjectId()}
+            nodes={nodes}
+            onClose={closeSnapshot}
+            onRestore={handleSnapshotRestore}
+          />
+        )}
+        {!readOnly && (
+          <SharePanel
+            open={shareOpen}
+            projectId={currentProjectId ?? getDefaultProjectId()}
+            onClose={() => setShareOpen(false)}
+          />
+        )}
       </div>
     </div>
   );

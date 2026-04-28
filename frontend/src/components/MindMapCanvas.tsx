@@ -6,6 +6,7 @@ type MindMapCanvasProps = {
   selectedId: string;
   zoom: number;
   outlineOpen: boolean;
+  readOnly?: boolean;
   onSelect: (id: string) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -38,6 +39,7 @@ export function MindMapCanvas({
   selectedId,
   zoom,
   outlineOpen,
+  readOnly,
   onSelect,
   onZoomIn,
   onZoomOut,
@@ -93,8 +95,12 @@ export function MindMapCanvas({
       </div>
       <div className="canvas-actions">
         <button onClick={onToggleOutline}>{outlineOpen ? '隐藏大纲' : '显示大纲'}</button>
-        <button onClick={onClearExecution}>清除执行记录</button>
-        <button onClick={onSnapshot}>快照当前结果</button>
+        {!readOnly && (
+          <>
+            <button onClick={onClearExecution}>清除执行记录</button>
+            <button onClick={onSnapshot}>快照当前结果</button>
+          </>
+        )}
       </div>
     </main>
   );

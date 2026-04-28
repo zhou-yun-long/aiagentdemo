@@ -172,3 +172,19 @@ export type SnapshotDto = {
   data: string;
   createdAt: string;
 };
+
+export type ShareDto = {
+  id: number;
+  projectId: number;
+  shareToken: string;
+  shareUrl: string;
+  active: boolean;
+  createdAt: string;
+};
+
+export type ShareDataDto = {
+  project: ProjectDto;
+  cases: TestCaseDto[];
+  mindmap: MindmapNodeDto[];
+  stats: CaseStatsDto;
+};

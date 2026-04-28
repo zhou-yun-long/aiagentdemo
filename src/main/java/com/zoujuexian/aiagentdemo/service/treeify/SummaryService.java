@@ -100,7 +100,7 @@ public class SummaryService {
         if (cases.isEmpty()) return "暂无已有用例";
         StringBuilder sb = new StringBuilder("已有测试用例：\n");
         for (var c : cases) {
-            sb.append("- ").append(c.getTitle()).append(" [").append(c.getPriority()).append("]\n");
+            sb.append("- ").append(c.title()).append(" [").append(c.priority()).append("]\n");
         }
         return sb.toString();
     }

@@ -103,6 +103,7 @@ export function useProjectLoader() {
   const setPageStatus = useWorkspaceStore((state) => state.setPageStatus);
   const pageStatus = useWorkspaceStore((state) => state.pageStatus);
   const pageError = useWorkspaceStore((state) => state.pageError);
+  const readOnly = useWorkspaceStore((state) => state.readOnly);
 
   const loadCasesFromCasesApi = useCallback(
     async (projectId: number, projectName: string) => {
@@ -172,6 +173,10 @@ export function useProjectLoader() {
   }, [loadCases, setPageStatus]);
 
   useEffect(() => {
+    if (readOnly) {
+      return;
+    }
+
     const apiMode = getTreeifyApiMode();
 
     if (apiMode === 'mock') {
@@ -189,7 +194,7 @@ export function useProjectLoader() {
       setPageStatus('ready');
       setServerStats(null);
     });
-  }, [loadFromApi, setPageStatus, setServerStats]);
+  }, [readOnly, loadFromApi, setPageStatus, setServerStats]);
 
   return { reloadCases, pageStatus, pageError };
 }

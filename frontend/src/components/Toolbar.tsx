@@ -36,6 +36,7 @@ type ToolbarProps = {
   stats: WorkspaceStats;
   theme: ThemeMode;
   onToggleTheme: () => void;
+  readOnly?: boolean;
   assistantOpen: boolean;
   onToggleAssistant: () => void;
   summaryOpen: boolean;
@@ -50,6 +51,7 @@ type ToolbarProps = {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onExportCases: (format: ExportFormat) => void;
+  onToggleShare: () => void;
   dirty: boolean;
   saving: boolean;
   saveResult: SaveResult | null;
@@ -63,6 +65,7 @@ export function Toolbar({
   stats,
   theme,
   onToggleTheme,
+  readOnly,
   assistantOpen,
   onToggleAssistant,
   summaryOpen,
@@ -77,6 +80,7 @@ export function Toolbar({
   onMoveUp,
   onMoveDown,
   onExportCases,
+  onToggleShare,
   dirty,
   saving,
   saveResult,
@@ -164,7 +168,7 @@ export function Toolbar({
             )}
           </div>
           <button className="ghost">1人在线</button>
-          <button className="ghost">
+          <button className="ghost" onClick={onToggleShare}>
             <Share2 size={15} />
             用例分享
           </button>
@@ -181,7 +185,7 @@ export function Toolbar({
           </button>
         </div>
       </div>
-      <div className="toolline">
+      {!readOnly && <div className="toolline">
         <button className="tool disabled">
           <RotateCcw size={15} />
           撤销
@@ -244,7 +248,7 @@ export function Toolbar({
           ))}
           <button className="add-tag">+ 新增</button>
         </div>
-      </div>
+      </div>}
     </header>
   );
 }

@@ -11,6 +11,7 @@ type WorkspaceState = {
   serverStats: WorkspaceStats | null;
   selectedId: string;
   theme: ThemeMode;
+  readOnly: boolean;
   assistantOpen: boolean;
   outlineOpen: boolean;
   summaryOpen: boolean;
@@ -27,6 +28,7 @@ type WorkspaceState = {
   deletedCaseIds: string[];
   selectNode: (id: string) => void;
   toggleTheme: () => void;
+  setReadOnly: (v: boolean) => void;
   toggleAssistant: () => void;
   closeAssistant: () => void;
   toggleOutline: () => void;
@@ -211,6 +213,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   serverStats: null,
   selectedId: 'success-steps',
   theme: 'light',
+  readOnly: false,
   assistantOpen: true,
   outlineOpen: true,
   summaryOpen: false,
@@ -226,6 +229,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   deletedCaseIds: [],
   selectNode: (id) => set({ selectedId: id }),
   toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
+  setReadOnly: (v) => set({ readOnly: v }),
   toggleAssistant: () => set((state) => ({ assistantOpen: !state.assistantOpen })),
   closeAssistant: () => set({ assistantOpen: false }),
   toggleOutline: () => set((state) => ({ outlineOpen: !state.outlineOpen })),

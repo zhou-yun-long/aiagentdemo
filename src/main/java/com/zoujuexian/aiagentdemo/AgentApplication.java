@@ -1,5 +1,6 @@
 package com.zoujuexian.aiagentdemo;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zoujuexian.aiagentdemo.api.controller.ChatController;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.boot.SpringApplication;
@@ -26,6 +27,11 @@ public class AgentApplication {
     public ChatClient chatClient(ChatClient.Builder chatClientBuilder) {
         return chatClientBuilder.build();
 
+    }
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
     }
 
     public static void main(String[] args) {

@@ -8,6 +8,8 @@ import type {
   MindmapNodeDto,
   ProjectDto,
   ProjectSummaryDto,
+  ShareDataDto,
+  ShareDto,
   SnapshotDto,
   TestCaseRequest,
   TestCaseDto,
@@ -172,4 +174,24 @@ export function deleteSnapshot(snapshotId: number) {
   return request<{ deleted: boolean }>(`/api/v1/snapshots/${snapshotId}`, {
     method: 'DELETE'
   });
+}
+
+export function createShare(projectId: number) {
+  return request<ShareDto>(`/api/v1/projects/${projectId}/share`, {
+    method: 'POST'
+  });
+}
+
+export function getShare(projectId: number) {
+  return request<ShareDto | null>(`/api/v1/projects/${projectId}/share`);
+}
+
+export function revokeShare(projectId: number) {
+  return request<void>(`/api/v1/projects/${projectId}/share`, {
+    method: 'DELETE'
+  });
+}
+
+export function getShareData(token: string) {
+  return request<ShareDataDto>(`/api/v1/share/${token}`);
 }
