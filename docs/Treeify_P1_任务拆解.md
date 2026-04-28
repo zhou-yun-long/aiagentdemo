@@ -223,9 +223,11 @@ public class ConfirmGenerateTaskRequest {
 
 ---
 
-### 3.4 P1-4：生成请求带 selectedNodeId/contextCaseIds
+### 3.4 P1-4：生成请求带 selectedNodeId/contextCaseIds ✅ 已完成
 
 **目标**：生成请求携带当前选中节点 ID 和关联用例 ID，让 AI 编排层能感知用户正在关注的测试对象，生成更精准的用例。
+
+**完成状态**：前端 `useGenerateStream` 发送 `selectedId` + 所有 case 节点的 `contextCaseIds`。后端 `TreeifyPersistenceService.appendGenerationContext()` 将选中节点和关联用例拼入生成 input。Entity、DTO 均已包含字段。
 
 **涉及前端文件**：
 

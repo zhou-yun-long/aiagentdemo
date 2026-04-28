@@ -682,30 +682,36 @@ Step 模式的 E2、E3 阶段**已实现**阶段间上下文传递。E2 使用 `
 
 **实现方式**：`useProjectLoader` 在加载项目和用例时调用 `getProjectCaseStats()`，结果存入 `serverStats`。`App.tsx` 中 `const stats = serverStats || localStats`，服务端数据优先，本地计算作 fallback。`useCasePersistence` 在每次用例变更后自动调用 `refreshStats()` 刷新。
 
-### 11.5 真实 AI 需有效 API Key
+### 11.5 生成请求带选区上下文（P1-4 已完成）
+
+生成任务**已实现**携带当前选区上下文，提升 AI 生成精准度。
+
+**实现方式**：前端 `useGenerateStream` 在创建生成任务时发送 `selectedNodeId`（当前选中节点）和 `contextCaseIds`（所有 case 节点的 ID）。后端 `TreeifyPersistenceService.appendGenerationContext()` 将选中节点 ID 和关联用例的 title/priority/steps/expected 拼入生成 input。`CreateGenerateTaskRequest`、`TreeifyGenerationTask` entity、`GenerateTaskDto` 均已包含这两个字段。Mock 模式下忽略上下文（不影响 mock 场景选择）。
+
+### 11.6 真实 AI 需有效 API Key
 
 AI 模式依赖有效的 `OPENAI_API_KEY` 和可访问的 `OPENAI_BASE_URL`。任一不可用会降级为 Mock。
 
-### 11.6 H2 文件数据库
+### 11.7 H2 文件数据库
 
 - 单实例访问（文件锁），不适合多实例部署
 - 数据文件 `data/treeify.mv.db` 需挂载卷持久化
 - Docker `down -v` 会删除数据
 
-### 11.7 Spring AI 里程碑版本
+### 11.8 Spring AI 里程碑版本
 
 - `spring-ai` 版本 `2.0.0-M4`（Milestone），API 可能变动
 - Spring Boot `4.0.5`，前沿版本
 
-### 11.8 脑图与用例非强绑定
+### 11.9 脑图与用例非强绑定
 
 脑图节点通过 `caseId` 关联测试用例，但二者独立 CRUD。脑图保存后若单独删除用例，节点不自动同步。
 
-### 11.9 无分页
+### 11.10 无分页
 
 项目和用例列表 API 无分页，大量数据时性能需关注。
 
-### 11.10 无用户认证
+### 11.11 无用户认证
 
 系统当前无用户认证/授权机制，所有 API 可以匿名访问。
 
