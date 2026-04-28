@@ -8,6 +8,7 @@ import { SummaryPanel } from './components/SummaryPanel';
 import { Toolbar } from './components/Toolbar';
 import { getDescendantIds, getWorkspaceStats, useWorkspaceStore } from './features/workspace/workspaceStore';
 import { getDefaultProjectId } from './shared/api/treeify';
+import { exportCases, type ExportCase, type ExportFormat } from './utils/exportCases';
 import { useCasePersistence } from './features/workspace/useCasePersistence';
 import { useMindmapSave } from './features/workspace/useMindmapSave';
 import { useProjectLoader } from './features/workspace/useProjectLoader';
@@ -80,17 +81,9 @@ export default function App() {
   const localStats = useMemo(() => getWorkspaceStats(nodes), [nodes]);
   const stats = serverStats || localStats;
 
-  const handleExportCases = () => {
-    const cases = buildCaseExport(nodes);
-    const blob = new Blob([JSON.stringify({ product: 'speccase', exportedAt: new Date().toISOString(), cases }, null, 2)], {
-      type: 'application/json;charset=utf-8'
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `speccase-cases-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const handleExportCases = (format: ExportFormat) => {
+    const cases: ExportCase[] = buildCaseExport(nodes);
+    exportCases(cases, format);
   };
 
   return (

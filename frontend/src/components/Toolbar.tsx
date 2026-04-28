@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -6,6 +7,8 @@ import {
   ChevronDown,
   Download,
   FileText,
+  FileSpreadsheet,
+  FileType,
   Fullscreen,
   Image,
   Link,
@@ -21,6 +24,7 @@ import {
   Wrench
 } from 'lucide-react';
 import type { ThemeMode, WorkspaceStats } from '../shared/types/workspace';
+import type { ExportFormat } from '../utils/exportCases';
 
 type SaveResult = {
   type: 'success' | 'error';
@@ -42,7 +46,7 @@ type ToolbarProps = {
   onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
-  onExportCases: () => void;
+  onExportCases: (format: ExportFormat) => void;
   dirty: boolean;
   saving: boolean;
   saveResult: SaveResult | null;
@@ -74,6 +78,24 @@ export function Toolbar({
   onSave
 }: ToolbarProps) {
   const failedRate = stats.totalCases ? Math.round((stats.failedCases / stats.totalCases) * 10000) / 100 : 0;
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  const handleExport = (format: ExportFormat) => {
+    setExportOpen(false);
+    onExportCases(format);
+  };
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [exportOpen]);
 
   return (
     <header className="toolbar">
@@ -110,10 +132,28 @@ export function Toolbar({
             <BookOpen size={15} />
             {knowledgeOpen ? '关闭知识库' : '知识库'}
           </button>
-          <button className="ghost" onClick={onExportCases}>
-            <Download size={15} />
-            导出用例
-          </button>
+          <div className="export-dropdown" ref={exportRef}>
+            <button className="ghost" onClick={() => setExportOpen((v) => !v)}>
+              <Download size={15} />
+              导出用例
+            </button>
+            {exportOpen && (
+              <div className="export-menu">
+                <button onClick={() => handleExport('json')}>
+                  <FileText size={14} />
+                  JSON
+                </button>
+                <button onClick={() => handleExport('csv')}>
+                  <FileSpreadsheet size={14} />
+                  CSV
+                </button>
+                <button onClick={() => handleExport('markdown')}>
+                  <FileType size={14} />
+                  Markdown
+                </button>
+              </div>
+            )}
+          </div>
           <button className="ghost">1人在线</button>
           <button className="ghost">
             <Share2 size={15} />
