@@ -1385,6 +1385,22 @@ button.small:disabled {
 
 .stream-display .stream-error {
   color: var(--red);
+  margin: 0;
+}
+
+.stream-error-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--blue);
+  white-space: nowrap;
 }
 
 .case-preview,

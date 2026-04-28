@@ -42,6 +42,7 @@ type GenerationState = {
   confirmCurrentStage: () => void;
   cancelTask: () => void;
   failTask: (message: string) => void;
+  retryTask: () => void;
   resetTask: () => void;
   updateCase: (id: string, patch: Partial<GeneratedCaseDraft>) => void;
   removeCase: (id: string) => void;
@@ -169,6 +170,11 @@ export const useGenerationStore = create<GenerationState>((set) => ({
       status: 'failed',
       activeStage: null,
       error: message
+    }),
+  retryTask: () =>
+    set({
+      status: 'running',
+      error: undefined
     }),
   resetTask: () =>
     set({

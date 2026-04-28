@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, Circle, Loader2, PauseCircle, Play, Square } from 'lucide-react';
+import { CheckCircle2, Circle, Loader2, PauseCircle, Play, RotateCcw, Square } from 'lucide-react';
 import type { GeneratedCaseDraft, GenerateStage, GenerationMode } from '../types/generation';
 import { useGenerationStore } from '../features/generation/generationStore';
 import { useGenerateStream } from '../features/generation/useGenerateStream';
@@ -42,7 +42,7 @@ export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
   const updateCase = useGenerationStore((state) => state.updateCase);
   const removeCase = useGenerationStore((state) => state.removeCase);
   const currentProjectId = useWorkspaceStore((state) => state.currentProjectId);
-  const { startGeneration, confirmCurrentStage, cancelGeneration } = useGenerateStream();
+  const { startGeneration, confirmCurrentStage, cancelGeneration, retryGeneration } = useGenerateStream();
 
   const canStart = input.trim().length > 0 && status !== 'running' && status !== 'waiting_confirm';
   const canConfirm = status === 'waiting_confirm';
@@ -150,7 +150,15 @@ export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
             />
           </div>
         )}
-        {error && <p className="stream-error">{error}</p>}
+        {error && (
+          <div className="stream-error-area">
+            <p className="stream-error">{error}</p>
+            <button className="ghost small retry-btn" onClick={retryGeneration}>
+              <RotateCcw size={14} />
+              重试
+            </button>
+          </div>
+        )}
       </div>
 
       <CasePreviewTable cases={cases} confirming={confirming} onUpdate={updateCase} onRemove={removeCase} onConfirm={handleImport} />

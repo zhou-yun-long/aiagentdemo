@@ -294,6 +294,23 @@ export function useGenerateStream() {
     [startMockGeneration, startRealGeneration]
   );
 
+  const retryGeneration = useCallback(() => {
+    const { taskId, source } = useGenerationStore.getState();
+    if (!taskId) return;
+
+    useGenerationStore.getState().retryTask();
+
+    if (source === 'real') {
+      // Re-open SSE stream for the existing task — backend resumes from last persisted stage
+      const streamUrl = `/api/v1/generate/${taskId}/stream`;
+      openRealStream(streamUrl);
+    } else {
+      // Mock mode: restart from the beginning
+      const { input, mode } = useGenerationStore.getState();
+      startMockGeneration(input, mode);
+    }
+  }, [openRealStream, startMockGeneration]);
+
   const confirmCurrentStage = useCallback(async (feedback?: string) => {
     const { activeStage, mode, source, taskId } = useGenerationStore.getState();
     if (!activeStage) {
@@ -301,9 +318,14 @@ export function useGenerateStream() {
     }
 
     if (source === 'real' && taskId) {
-      const task = await confirmGenerateTask(taskId, { stage: activeStage, feedback });
-      useGenerationStore.getState().confirmCurrentStage();
-      openRealStream(getGenerateStreamUrl(task));
+      try {
+        const task = await confirmGenerateTask(taskId, { stage: activeStage, feedback });
+        useGenerationStore.getState().confirmCurrentStage();
+        openRealStream(getGenerateStreamUrl(task));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '确认阶段失败，请重试';
+        useGenerationStore.getState().failTask(message);
+      }
       return;
     }
 
@@ -338,6 +360,7 @@ export function useGenerateStream() {
   return {
     startGeneration,
     confirmCurrentStage,
-    cancelGeneration
+    cancelGeneration,
+    retryGeneration
   };
 }
