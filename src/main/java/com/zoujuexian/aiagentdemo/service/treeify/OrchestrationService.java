@@ -17,6 +17,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -157,7 +158,7 @@ public class OrchestrationService implements TreeifyGenerationService {
                                 Map.of("content", chunk)));
                     })
                     .doOnError(e -> log.warn("Streaming error for stage {}: {}", stageName, e.getMessage()))
-                    .blockLast();
+                    .blockLast(Duration.ofSeconds(60));
         } catch (Exception e) {
             log.warn("Stage {} streaming failed, using synchronous fallback: {}", stageName, e.getMessage());
             StageResult result = executeStageWithRetry(stageName, ctx);

@@ -11,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import reactor.core.publisher.Flux;
 
+import java.time.Duration;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -55,12 +57,23 @@ public final class AiStageAgents {
 
     /**
      * Stream LLM response tokens using ChatClient.stream().
+     * Falls back to synchronous call if streaming hangs (30s timeout).
      */
     private static Flux<String> streamChat(ChatClient chatClient, String prompt) {
         return chatClient.prompt().user(prompt).stream().chatResponse()
+                .timeout(Duration.ofSeconds(30))
                 .mapNotNull(cr -> cr.getResult() != null && cr.getResult().getOutput() != null
                         ? cr.getResult().getOutput().getText()
-                        : null);
+                        : null)
+                .onErrorResume(e -> {
+                    // Fallback: use synchronous call
+                    try {
+                        String response = chatClient.prompt().user(prompt).call().content();
+                        return Flux.just(response != null ? response : "");
+                    } catch (Exception ex) {
+                        return Flux.empty();
+                    }
+                });
     }
 
     // ──── E1: Requirements Analysis ────
