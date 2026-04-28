@@ -276,9 +276,11 @@ public class ConfirmGenerateTaskRequest {
 
 ---
 
-### 3.5 P1-5：Agent Orchestrator 轻量抽象
+### 3.5 P1-5：Agent Orchestrator 轻量抽象 ✅ 已完成
 
 **目标**：将当前 `AiTreeifyGenerationService` 中硬编码的串行 LLM 调用，抽象为 `OrchestrationService` + 可配置的 `StageAgent`，为后续多 Agent 协作、重试策略、结构化输出校验铺路。不对用户产生直接感知变化。
+
+**完成状态**：新建 `agent/` 子包，包含 `StageAgent` 接口、`StageContext`/`StageResult` 数据类、`JsonOutputParser` 解析工具、`AiStageAgents`（E1/E2/E3/Critic 四个实现）。`OrchestrationService` 实现 `TreeifyGenerationService`，编排各阶段执行。`TreeifyGenerationConfig` 改为创建 `OrchestrationService`。`AiTreeifyGenerationService` 保留但不再注入。
 
 **涉及前端文件**：无。纯后端重构。
 

@@ -688,30 +688,43 @@ Step 模式的 E2、E3 阶段**已实现**阶段间上下文传递。E2 使用 `
 
 **实现方式**：前端 `useGenerateStream` 在创建生成任务时发送 `selectedNodeId`（当前选中节点）和 `contextCaseIds`（所有 case 节点的 ID）。后端 `TreeifyPersistenceService.appendGenerationContext()` 将选中节点 ID 和关联用例的 title/priority/steps/expected 拼入生成 input。`CreateGenerateTaskRequest`、`TreeifyGenerationTask` entity、`GenerateTaskDto` 均已包含这两个字段。Mock 模式下忽略上下文（不影响 mock 场景选择）。
 
-### 11.6 真实 AI 需有效 API Key
+### 11.6 Agent Orchestrator 抽象（P1-5 已完成）
+
+AI 生成链路**已重构**为 `OrchestrationService` + 可配置 `StageAgent` 架构。
+
+**实现方式**：新建 `service/treeify/agent/` 子包，包含：
+- `StageAgent` 接口 — 单阶段抽象（`stageName()` + `execute(StageContext)`）
+- `StageContext` — 阶段间上下文传递（taskId、input、feedback、stageResults）
+- `StageResult` — 阶段输出（content + data）
+- `JsonOutputParser` — LLM JSON 输出解析（三层防线：strip markdown → parse → wrap array）
+- `AiStageAgents` — E1/E2/E3/Critic 四个 AI 实现
+
+`OrchestrationService` 实现 `TreeifyGenerationService`，编排 auto/step 两种模式的阶段执行。`TreeifyGenerationConfig` 在 AI 模式下创建 `OrchestrationService` 替代原 `AiTreeifyGenerationService`。Mock 链路不受影响。
+
+### 11.7 真实 AI 需有效 API Key
 
 AI 模式依赖有效的 `OPENAI_API_KEY` 和可访问的 `OPENAI_BASE_URL`。任一不可用会降级为 Mock。
 
-### 11.7 H2 文件数据库
+### 11.8 H2 文件数据库
 
 - 单实例访问（文件锁），不适合多实例部署
 - 数据文件 `data/treeify.mv.db` 需挂载卷持久化
 - Docker `down -v` 会删除数据
 
-### 11.8 Spring AI 里程碑版本
+### 11.9 Spring AI 里程碑版本
 
 - `spring-ai` 版本 `2.0.0-M4`（Milestone），API 可能变动
 - Spring Boot `4.0.5`，前沿版本
 
-### 11.9 脑图与用例非强绑定
+### 11.10 脑图与用例非强绑定
 
 脑图节点通过 `caseId` 关联测试用例，但二者独立 CRUD。脑图保存后若单独删除用例，节点不自动同步。
 
-### 11.10 无分页
+### 11.11 无分页
 
 项目和用例列表 API 无分页，大量数据时性能需关注。
 
-### 11.11 无用户认证
+### 11.12 无用户认证
 
 系统当前无用户认证/授权机制，所有 API 可以匿名访问。
 

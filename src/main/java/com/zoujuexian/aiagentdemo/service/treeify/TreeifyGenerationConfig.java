@@ -1,5 +1,7 @@
 package com.zoujuexian.aiagentdemo.service.treeify;
 
+import com.zoujuexian.aiagentdemo.service.treeify.agent.AiStageAgents;
+import com.zoujuexian.aiagentdemo.service.treeify.agent.StageAgent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -8,9 +10,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * Selects which TreeifyGenerationService implementation to use based on
  * the treeify.generation.mode property (mock / ai / auto).
+ *
+ * When AI mode is active, uses OrchestrationService with composable StageAgents.
+ * AiTreeifyGenerationService is retained for reference but no longer wired.
  */
 @Configuration
 public class TreeifyGenerationConfig {
@@ -32,14 +40,12 @@ public class TreeifyGenerationConfig {
             selected = mockService;
             log.info("Treeify generation: using MOCK (forced by config)");
         } else if ("ai".equals(mode)) {
-            AiTreeifyGenerationService aiService = new AiTreeifyGenerationService(chatClient, mockService, apiKey);
-            selected = aiService;
+            selected = buildOrchestration(chatClient, mockService, apiKey);
             log.info("Treeify generation: using AI (forced by config), llmAvailable={}", llmAvailable);
         } else {
             // auto mode: use AI if key is set, else mock
             if (llmAvailable) {
-                AiTreeifyGenerationService aiService = new AiTreeifyGenerationService(chatClient, mockService, apiKey);
-                selected = aiService;
+                selected = buildOrchestration(chatClient, mockService, apiKey);
                 log.info("Treeify generation: using AI (auto-detected from API key)");
             } else {
                 selected = mockService;
@@ -47,5 +53,14 @@ public class TreeifyGenerationConfig {
             }
         }
         return selected;
+    }
+
+    private OrchestrationService buildOrchestration(ChatClient chatClient, MockGenerationService mockService, String apiKey) {
+        Map<String, StageAgent> agents = new LinkedHashMap<>();
+        agents.put("e1", new AiStageAgents.E1Agent(chatClient));
+        agents.put("e2", new AiStageAgents.E2Agent(chatClient));
+        agents.put("e3", new AiStageAgents.E3Agent(chatClient, mockService));
+        agents.put("critic", new AiStageAgents.CriticAgent(chatClient));
+        return new OrchestrationService(agents, mockService, apiKey);
     }
 }
