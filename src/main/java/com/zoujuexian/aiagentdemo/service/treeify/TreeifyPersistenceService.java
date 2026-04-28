@@ -14,10 +14,12 @@ import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.SaveMindmapRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseRequest;
+import com.zoujuexian.aiagentdemo.domain.entity.TreeifyGenerationEvent;
 import com.zoujuexian.aiagentdemo.domain.entity.TreeifyGenerationTask;
 import com.zoujuexian.aiagentdemo.domain.entity.TreeifyMindmapNode;
 import com.zoujuexian.aiagentdemo.domain.entity.TreeifyProject;
 import com.zoujuexian.aiagentdemo.domain.entity.TreeifyTestCase;
+import com.zoujuexian.aiagentdemo.domain.repository.TreeifyGenerationEventRepository;
 import com.zoujuexian.aiagentdemo.domain.repository.TreeifyGenerationTaskRepository;
 import com.zoujuexian.aiagentdemo.domain.repository.TreeifyMindmapNodeRepository;
 import com.zoujuexian.aiagentdemo.domain.repository.TreeifyProjectRepository;
@@ -46,17 +48,20 @@ public class TreeifyPersistenceService {
     private final TreeifyTestCaseRepository caseRepo;
     private final TreeifyGenerationTaskRepository taskRepo;
     private final TreeifyMindmapNodeRepository mindmapRepo;
+    private final TreeifyGenerationEventRepository eventRepo;
 
     public TreeifyPersistenceService(
             TreeifyProjectRepository projectRepo,
             TreeifyTestCaseRepository caseRepo,
             TreeifyGenerationTaskRepository taskRepo,
-            TreeifyMindmapNodeRepository mindmapRepo
+            TreeifyMindmapNodeRepository mindmapRepo,
+            TreeifyGenerationEventRepository eventRepo
     ) {
         this.projectRepo = projectRepo;
         this.caseRepo = caseRepo;
         this.taskRepo = taskRepo;
         this.mindmapRepo = mindmapRepo;
+        this.eventRepo = eventRepo;
     }
 
     @PostConstruct
@@ -639,6 +644,18 @@ public class TreeifyPersistenceService {
             ));
         }
         return nodes;
+    }
+
+    // ──── Generation Event persistence ────
+
+    @Transactional
+    public void persistEvent(String taskId, String eventName, String stage, long sequence, String payloadJson) {
+        TreeifyGenerationEvent event = new TreeifyGenerationEvent(taskId, eventName, stage, sequence, payloadJson);
+        eventRepo.save(event);
+    }
+
+    public List<TreeifyGenerationEvent> replayEvents(String taskId) {
+        return eventRepo.findAllByTaskIdOrderBySequenceAsc(taskId);
     }
 
     // ──── Validation helpers ────
