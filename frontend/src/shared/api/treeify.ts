@@ -5,7 +5,9 @@ import type {
   CreateGenerateTaskRequest,
   GenerateTaskDto,
   KnowledgeDocumentDto,
+  McpServerInfo,
   MindmapNodeDto,
+  ModelParams,
   ProjectDto,
   ProjectSummaryDto,
   ShareDataDto,
@@ -194,4 +196,50 @@ export function revokeShare(projectId: number) {
 
 export function getShareData(token: string) {
   return request<ShareDataDto>(`/api/v1/share/${token}`);
+}
+
+// ---- MCP / Manage API ----
+// These endpoints use ChatResponse format (success/reply/error) instead of ApiResponse
+
+type ChatApiResponse = { success: boolean; reply?: string; error?: string };
+
+async function manageRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    ...init
+  });
+  const payload = (await response.json().catch(() => null)) as ChatApiResponse | null;
+  if (!response.ok || !payload || !payload.success) {
+    throw new Error(payload?.error || response.statusText || '请求失败');
+  }
+  return payload as unknown as T;
+}
+
+export function listMcpServers() {
+  return request<McpServerInfo[]>('/api/manage/mcp/list');
+}
+
+export function connectMcpServer(url: string) {
+  return manageRequest<ChatApiResponse>('/api/manage/mcp/connect', {
+    method: 'POST',
+    body: JSON.stringify({ url })
+  });
+}
+
+export function disconnectMcpServer(url: string) {
+  return manageRequest<ChatApiResponse>('/api/manage/mcp/disconnect', {
+    method: 'POST',
+    body: JSON.stringify({ url })
+  });
+}
+
+export function getModelParams() {
+  return request<ModelParams>('/api/manage/model-params');
+}
+
+export function updateModelParams(params: Partial<ModelParams>) {
+  return request<void>('/api/manage/model-params', {
+    method: 'POST',
+    body: JSON.stringify(params)
+  });
 }

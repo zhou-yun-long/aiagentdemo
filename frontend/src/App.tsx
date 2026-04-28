@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AiAssistantPanel } from './components/AiAssistantPanel';
+import { IntegrationPanel } from './components/IntegrationPanel';
 import { KnowledgePanel } from './components/KnowledgePanel';
 import { MindMapCanvas } from './components/MindMapCanvas';
 import { OutlinePanel } from './components/OutlinePanel';
@@ -52,6 +53,7 @@ export default function App() {
   const summaryOpen = useWorkspaceStore((state) => state.summaryOpen);
   const knowledgeOpen = useWorkspaceStore((state) => state.knowledgeOpen);
   const snapshotOpen = useWorkspaceStore((state) => state.snapshotOpen);
+  const integrationOpen = useWorkspaceStore((state) => state.integrationOpen);
   const zoom = useWorkspaceStore((state) => state.zoom);
   const lastSnapshotAt = useWorkspaceStore((state) => state.lastSnapshotAt);
   const selectNode = useWorkspaceStore((state) => state.selectNode);
@@ -65,6 +67,8 @@ export default function App() {
   const closeKnowledge = useWorkspaceStore((state) => state.closeKnowledge);
   const toggleSnapshot = useWorkspaceStore((state) => state.toggleSnapshot);
   const closeSnapshot = useWorkspaceStore((state) => state.closeSnapshot);
+  const toggleIntegration = useWorkspaceStore((state) => state.toggleIntegration);
+  const closeIntegration = useWorkspaceStore((state) => state.closeIntegration);
   const updateNode = useWorkspaceStore((state) => state.updateNode);
   const addChildNode = useWorkspaceStore((state) => state.addChildNode);
   const addSiblingNode = useWorkspaceStore((state) => state.addSiblingNode);
@@ -127,12 +131,13 @@ export default function App() {
         onMoveDown={() => moveSelectedNode('down')}
         onExportCases={handleExportCases}
         onToggleShare={() => setShareOpen((v) => !v)}
+        onToggleIntegration={toggleIntegration}
         dirty={dirty}
         saving={saving}
         saveResult={saveResult}
         onSave={save}
       />
-      <div className={`workspace ${assistantOpen && !readOnly ? '' : 'assistant-closed'} ${outlineOpen ? '' : 'outline-hidden'} ${summaryOpen ? 'summary-open' : ''} ${knowledgeOpen ? 'knowledge-open' : ''} ${snapshotOpen ? 'snapshot-open' : ''}`}>
+      <div className={`workspace ${assistantOpen && !readOnly ? '' : 'assistant-closed'} ${outlineOpen ? '' : 'outline-hidden'} ${summaryOpen ? 'summary-open' : ''} ${knowledgeOpen ? 'knowledge-open' : ''} ${snapshotOpen ? 'snapshot-open' : ''} ${integrationOpen ? 'integration-open' : ''}`}>
         {outlineOpen && <OutlinePanel nodes={nodes} selectedId={selectedId} onSelect={selectNode} onClose={toggleOutline} />}
         <section className="work-area">
           {pageStatus === 'loading' ? (
@@ -206,6 +211,12 @@ export default function App() {
             open={shareOpen}
             projectId={currentProjectId ?? getDefaultProjectId()}
             onClose={() => setShareOpen(false)}
+          />
+        )}
+        {!readOnly && (
+          <IntegrationPanel
+            open={integrationOpen}
+            onClose={closeIntegration}
           />
         )}
       </div>

@@ -19,6 +19,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Settings,
   Share2,
   Sun,
   Trash2,
@@ -52,6 +53,7 @@ type ToolbarProps = {
   onMoveDown: () => void;
   onExportCases: (format: ExportFormat) => void;
   onToggleShare: () => void;
+  onToggleIntegration: () => void;
   dirty: boolean;
   saving: boolean;
   saveResult: SaveResult | null;
@@ -81,6 +83,7 @@ export function Toolbar({
   onMoveDown,
   onExportCases,
   onToggleShare,
+  onToggleIntegration,
   dirty,
   saving,
   saveResult,
@@ -232,6 +235,10 @@ export function Toolbar({
         <button className="tool">
           <PanelRightOpen size={15} />
           自动化
+        </button>
+        <button className="tool" onClick={onToggleIntegration}>
+          <Settings size={15} />
+          集成设置
         </button>
         <div className="pills">
           {priorities.map((item) => (

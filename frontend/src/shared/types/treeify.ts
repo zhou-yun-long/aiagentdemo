@@ -188,3 +188,22 @@ export type ShareDataDto = {
   mindmap: MindmapNodeDto[];
   stats: CaseStatsDto;
 };
+
+export type McpServerInfo = {
+  url: string;
+  name: string;
+  version: string;
+  toolNames: string[];
+  connected: boolean;
+};
+
+export type McpConnectResponse = {
+  success: boolean;
+  message: string;
+};
+
+export type ModelParams = {
+  temperature: number;
+  maxTokens: number;
+  topP: number;
+};
