@@ -205,6 +205,7 @@ export default function App() {
                 onToggleOutline={toggleOutline}
                 onClearExecution={clearExecutionRecords}
                 onSnapshot={snapshotCurrentResult}
+                setZoom={setZoom}
               />
               <SelectionBar
                 node={selectedNode}

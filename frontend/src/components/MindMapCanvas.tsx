@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MindNode } from '../shared/types/workspace';
 import { NodeCard } from './NodeCard';
 
@@ -15,6 +16,7 @@ type MindMapCanvasProps = {
   onToggleOutline: () => void;
   onClearExecution: () => void;
   onSnapshot: () => void;
+  setZoom: (zoom: number) => void;
 };
 
 const canvasSize = {
@@ -48,8 +50,131 @@ export function MindMapCanvas({
   onFit,
   onToggleOutline,
   onClearExecution,
-  onSnapshot
+  onSnapshot,
+  setZoom
 }: MindMapCanvasProps) {
+  const shellRef = useRef<HTMLElement>(null);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [spaceDown, setSpaceDown] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const [smoothFollow, setSmoothFollow] = useState(false);
+  const panStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const smoothTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Space key held → grab cursor
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault();
+        setSpaceDown(true);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setSpaceDown(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
+  // Drag-to-pan (space+drag or middle-mouse drag)
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button === 1 || (e.button === 0 && spaceDown)) {
+        e.preventDefault();
+        setIsPanning(true);
+        panStartRef.current = { x: e.clientX, y: e.clientY, panX, panY };
+      }
+    },
+    [spaceDown, panX, panY]
+  );
+
+  useEffect(() => {
+    if (!isPanning) return;
+    const onMouseMove = (e: MouseEvent) => {
+      if (!panStartRef.current) return;
+      const dx = e.clientX - panStartRef.current.x;
+      const dy = e.clientY - panStartRef.current.y;
+      setPanX(panStartRef.current.panX + dx);
+      setPanY(panStartRef.current.panY + dy);
+    };
+    const onMouseUp = () => {
+      setIsPanning(false);
+      panStartRef.current = null;
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [isPanning]);
+
+  // Wheel: Ctrl/Cmd+wheel → zoom, plain wheel → pan
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        // Zoom toward cursor
+        const rect = shell.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+        const newZoom = Math.min(1.4, Math.max(0.6, zoom * factor));
+        const clampedZoom = Math.round(newZoom * 100) / 100;
+        // Keep point under cursor fixed
+        setPanX(mouseX - ((mouseX - panX) / zoom) * clampedZoom);
+        setPanY(mouseY - ((mouseY - panY) / zoom) * clampedZoom);
+        setZoom(clampedZoom);
+      } else {
+        // Pan
+        setPanX((prev) => prev - e.deltaX);
+        setPanY((prev) => prev - e.deltaY);
+      }
+    };
+    shell.addEventListener('wheel', onWheel, { passive: false });
+    return () => shell.removeEventListener('wheel', onWheel);
+  }, [zoom, panX, panY, setZoom]);
+
+  // Auto-scroll to selected node
+  useEffect(() => {
+    if (!selectedId || !shellRef.current) return;
+    const node = nodes.find((n) => n.id === selectedId);
+    if (!node) return;
+
+    const shell = shellRef.current;
+    const { width: shellW, height: shellH } = shell.getBoundingClientRect();
+    const pos = getPosition(node);
+    const nodeW = node.kind === 'root' ? 192 : 170;
+    const nodeH = 36;
+    const centerX = (pos.x + nodeW / 2) * zoom + panX;
+    const centerY = (pos.y + nodeH / 2) * zoom + panY;
+    const margin = 120;
+
+    if (
+      centerX < margin ||
+      centerX > shellW - margin ||
+      centerY < margin ||
+      centerY > shellH - margin
+    ) {
+      const newPanX = shellW / 2 - (pos.x + nodeW / 2) * zoom;
+      const newPanY = shellH / 2 - (pos.y + nodeH / 2) * zoom;
+      setSmoothFollow(true);
+      setPanX(newPanX);
+      setPanY(newPanY);
+      if (smoothTimerRef.current) clearTimeout(smoothTimerRef.current);
+      smoothTimerRef.current = setTimeout(() => setSmoothFollow(false), 350);
+    }
+  }, [selectedId, nodes, zoom]);
+
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
 
   const childMap = new Map<string, string[]>();
@@ -75,10 +200,23 @@ export function MindMapCanvas({
 
   const visibleNodes = nodes.filter((node) => !collapsedAncestors.has(node.id));
 
+  const shellClass = [
+    'canvas-shell',
+    spaceDown && !isPanning ? 'space-down' : '',
+    isPanning ? 'panning' : '',
+    smoothFollow ? 'canvas-follow-transition' : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <main className="canvas-shell">
+    <main
+      ref={shellRef}
+      className={shellClass}
+      onMouseDown={handleMouseDown}
+    >
       <div className="canvas-viewport" style={{ width: canvasSize.width * zoom, height: canvasSize.height * zoom }}>
-        <div className="canvas" style={{ transform: `scale(${zoom})` }}>
+        <div className="canvas" style={{ transform: `translate(${panX}px, ${panY}px) scale(${zoom})` }}>
           <svg className="connectors" viewBox="0 0 1320 620" preserveAspectRatio="none" aria-hidden="true">
             {visibleNodes
               .filter((node) => node.parentId)

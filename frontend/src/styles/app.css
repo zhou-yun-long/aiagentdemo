@@ -466,7 +466,20 @@ textarea {
 .canvas-shell {
   position: relative;
   height: 100%;
-  overflow: auto;
+  overflow: hidden;
+  user-select: none;
+}
+
+.canvas-shell.space-down {
+  cursor: grab;
+}
+
+.canvas-shell.panning {
+  cursor: grabbing;
+}
+
+.canvas-follow-transition .canvas {
+  transition: transform 0.3s ease;
 }
 
 .canvas {
