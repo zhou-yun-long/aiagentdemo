@@ -129,10 +129,28 @@ export function Toolbar({
   const exportRef = useRef<HTMLDivElement>(null);
   const [toolOpen, setToolOpen] = useState(false);
   const toolRef = useRef<HTMLDivElement>(null);
+  const [fontOpen, setFontOpen] = useState(false);
+  const fontRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [currentFont, setCurrentFont] = useState('Inter');
   const [tagList, setTagList] = useState(['前置条件', '执行步骤', '预期结果', 'iOS', 'Android', 'Web', 'AI', '缓存', '数据', '变更']);
   const [addingTag, setAddingTag] = useState(false);
   const [newTagValue, setNewTagValue] = useState('');
+
+  const fontOptions = [
+    { label: 'Inter', value: 'Inter, ui-sans-serif, system-ui, sans-serif' },
+    { label: '系统默认', value: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' },
+    { label: '微软雅黑', value: '"Microsoft YaHei", "PingFang SC", sans-serif' },
+    { label: '宋体', value: '"SimSun", "Songti SC", serif' },
+    { label: '等宽字体', value: '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, monospace' },
+    { label: 'Serif', value: 'Georgia, "Times New Roman", serif' },
+  ];
+
+  const handleFontChange = (fontName: string, fontValue: string) => {
+    document.documentElement.style.setProperty('font-family', fontValue);
+    setCurrentFont(fontName);
+    setFontOpen(false);
+  };
 
   const handleExport = (format: ExportFormat) => {
     setExportOpen(false);
@@ -201,6 +219,17 @@ export function Toolbar({
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [toolOpen]);
+
+  useEffect(() => {
+    if (!fontOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (fontRef.current && !fontRef.current.contains(e.target as Node)) {
+        setFontOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [fontOpen]);
 
   return (
     <header className="toolbar">
@@ -284,10 +313,26 @@ export function Toolbar({
             <Share2 size={15} />
             用例分享
           </button>
-          <button className="ghost">
-            本地字体
-            <ChevronDown size={14} />
-          </button>
+          <div className="font-dropdown" ref={fontRef}>
+            <button className="ghost" onClick={() => setFontOpen((v) => !v)}>
+              {currentFont}
+              <ChevronDown size={14} />
+            </button>
+            {fontOpen && (
+              <div className="font-menu">
+                {fontOptions.map((font) => (
+                  <button
+                    key={font.label}
+                    className={currentFont === font.label ? 'active' : ''}
+                    style={{ fontFamily: font.value }}
+                    onClick={() => handleFontChange(font.label, font.value)}
+                  >
+                    {font.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button className="icon" onClick={onToggleTheme} aria-label="切换主题">
             {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
