@@ -79,6 +79,9 @@ type ToolbarProps = {
   onClearExecution: () => void;
   onSnapshot: () => void;
   onFit: () => void;
+  zoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
 };
 
 const priorities = ['P0', 'P1', 'P2', 'P3'];
@@ -121,7 +124,10 @@ export function Toolbar({
   onUpdate,
   onClearExecution,
   onSnapshot,
-  onFit
+  onFit,
+  zoom,
+  onZoomIn,
+  onZoomOut
 }: ToolbarProps) {
   const navigate = useNavigate();
   const failedRate = stats.totalCases ? Math.round((stats.failedCases / stats.totalCases) * 10000) / 100 : 0;
@@ -133,6 +139,8 @@ export function Toolbar({
   const fontRef = useRef<HTMLDivElement>(null);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const appearanceRef = useRef<HTMLDivElement>(null);
+  const [viewOpen, setViewOpen] = useState(false);
+  const viewRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentFont, setCurrentFont] = useState('Inter');
   const [fontSize, setFontSize] = useState(14);
@@ -251,6 +259,17 @@ export function Toolbar({
     return () => document.removeEventListener('mousedown', handleClick);
   }, [appearanceOpen]);
 
+  useEffect(() => {
+    if (!viewOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (viewRef.current && !viewRef.current.contains(e.target as Node)) {
+        setViewOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [viewOpen]);
+
   return (
     <header className="toolbar">
       <div className="topline">
@@ -306,7 +325,51 @@ export function Toolbar({
               </div>
             )}
           </div>
-          <button className="tab">视图</button>
+          <div className="tab-dropdown" ref={viewRef}>
+            <button className={`tab${viewOpen ? ' active' : ''}`} onClick={() => setViewOpen((v) => !v)}>视图</button>
+            {viewOpen && (
+              <div className="appearance-panel">
+                <div className="appearance-section">
+                  <label>缩放: {Math.round(zoom * 100)}%</label>
+                  <div className="appearance-row">
+                    <button className="appearance-btn" onClick={onZoomOut} disabled={zoom <= 0.6}>−</button>
+                    <input
+                      type="range"
+                      min={60}
+                      max={140}
+                      value={Math.round(zoom * 100)}
+                      onChange={(e) => {
+                        const target = Number(e.target.value) / 100;
+                        const steps = Math.round((target - zoom) * 10);
+                        for (let i = 0; i < Math.abs(steps); i++) {
+                          if (steps > 0) onZoomIn(); else onZoomOut();
+                        }
+                      }}
+                    />
+                    <button className="appearance-btn" onClick={onZoomIn} disabled={zoom >= 1.4}>+</button>
+                  </div>
+                </div>
+                <div className="appearance-section">
+                  <div className="appearance-row">
+                    <button className="appearance-btn" onClick={onFit}>适应画布</button>
+                    <button className="appearance-btn" onClick={() => {
+                      const steps = Math.round((1 - zoom) * 10);
+                      for (let i = 0; i < Math.abs(steps); i++) {
+                        if (steps > 0) onZoomIn(); else onZoomOut();
+                      }
+                    }}>重置 100%</button>
+                  </div>
+                </div>
+                <div className="appearance-section">
+                  <label>面板</label>
+                  <div className="appearance-row">
+                    <button className={`appearance-btn${outlineOpen ? ' active' : ''}`} onClick={onToggleOutline}>大纲</button>
+                    <button className={`appearance-btn${assistantOpen ? ' active' : ''}`} onClick={onToggleAssistant}>AI助手</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <div className="stats">
           <span>通过率: {stats.passRate.toFixed(2)}%</span>

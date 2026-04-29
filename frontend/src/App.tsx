@@ -169,6 +169,9 @@ export default function App() {
         onClearExecution={clearExecutionRecords}
         onSnapshot={snapshotCurrentResult}
         onFit={fitZoom}
+        zoom={zoom}
+        onZoomIn={() => setZoom(zoom + 0.1)}
+        onZoomOut={() => setZoom(zoom - 0.1)}
       />
       <div className={`workspace ${assistantOpen && !readOnly ? '' : 'assistant-closed'} ${outlineOpen ? '' : 'outline-hidden'} ${summaryOpen ? 'summary-open' : ''} ${knowledgeOpen ? 'knowledge-open' : ''} ${snapshotOpen ? 'snapshot-open' : ''} ${integrationOpen ? 'integration-open' : ''}`}>
         {outlineOpen && <OutlinePanel nodes={nodes} selectedId={selectedId} onSelect={selectNode} onClose={toggleOutline} />}
