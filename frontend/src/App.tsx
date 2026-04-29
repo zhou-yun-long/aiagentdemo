@@ -57,6 +57,7 @@ export default function App() {
   const zoom = useWorkspaceStore((state) => state.zoom);
   const lastSnapshotAt = useWorkspaceStore((state) => state.lastSnapshotAt);
   const selectNode = useWorkspaceStore((state) => state.selectNode);
+  const toggleCollapse = useWorkspaceStore((state) => state.toggleCollapse);
   const toggleTheme = useWorkspaceStore((state) => state.toggleTheme);
   const toggleAssistant = useWorkspaceStore((state) => state.toggleAssistant);
   const closeAssistant = useWorkspaceStore((state) => state.closeAssistant);
@@ -197,6 +198,7 @@ export default function App() {
                 outlineOpen={outlineOpen}
                 readOnly={readOnly}
                 onSelect={selectNode}
+                onToggleCollapse={toggleCollapse}
                 onZoomIn={() => setZoom(zoom + 0.1)}
                 onZoomOut={() => setZoom(zoom - 0.1)}
                 onFit={fitZoom}

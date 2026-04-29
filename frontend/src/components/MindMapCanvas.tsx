@@ -8,6 +8,7 @@ type MindMapCanvasProps = {
   outlineOpen: boolean;
   readOnly?: boolean;
   onSelect: (id: string) => void;
+  onToggleCollapse: (id: string) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFit: () => void;
@@ -41,6 +42,7 @@ export function MindMapCanvas({
   outlineOpen,
   readOnly,
   onSelect,
+  onToggleCollapse,
   onZoomIn,
   onZoomOut,
   onFit,
@@ -50,12 +52,35 @@ export function MindMapCanvas({
 }: MindMapCanvasProps) {
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
 
+  const childMap = new Map<string, string[]>();
+  for (const node of nodes) {
+    if (node.parentId) {
+      if (!childMap.has(node.parentId)) childMap.set(node.parentId, []);
+      childMap.get(node.parentId)!.push(node.id);
+    }
+  }
+
+  const collapsedAncestors = new Set<string>();
+  for (const node of nodes) {
+    if (node.collapsed) {
+      const stack = childMap.get(node.id) ? [...childMap.get(node.id)!] : [];
+      while (stack.length) {
+        const cid = stack.pop()!;
+        collapsedAncestors.add(cid);
+        const grandchildren = childMap.get(cid);
+        if (grandchildren) stack.push(...grandchildren);
+      }
+    }
+  }
+
+  const visibleNodes = nodes.filter((node) => !collapsedAncestors.has(node.id));
+
   return (
     <main className="canvas-shell">
       <div className="canvas-viewport" style={{ width: canvasSize.width * zoom, height: canvasSize.height * zoom }}>
         <div className="canvas" style={{ transform: `scale(${zoom})` }}>
           <svg className="connectors" viewBox="0 0 1320 620" preserveAspectRatio="none" aria-hidden="true">
-            {nodes
+            {visibleNodes
               .filter((node) => node.parentId)
               .map((node) => {
                 const parent = nodeMap.get(node.parentId!);
@@ -77,11 +102,12 @@ export function MindMapCanvas({
                 );
               })}
           </svg>
-          {nodes.map((node) => {
+          {visibleNodes.map((node) => {
             const position = getPosition(node);
+            const hasChildren = childMap.has(node.id);
             return (
               <div className="node-position" key={node.id} style={{ left: position.x, top: position.y }}>
-                <NodeCard node={node} selected={selectedId === node.id} onSelect={onSelect} />
+                <NodeCard node={node} selected={selectedId === node.id} hasChildren={hasChildren} onSelect={onSelect} onToggleCollapse={onToggleCollapse} />
               </div>
             );
           })}

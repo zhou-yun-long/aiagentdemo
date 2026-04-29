@@ -32,6 +32,7 @@ type WorkspaceState = {
   statusDirtyIds: string[];
   deletedCaseIds: string[];
   selectNode: (id: string) => void;
+  toggleCollapse: (id: string) => void;
   undo: () => void;
   redo: () => void;
   toggleTheme: () => void;
@@ -240,6 +241,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   statusDirtyIds: [],
   deletedCaseIds: [],
   selectNode: (id) => set({ selectedId: id }),
+  toggleCollapse: (id) =>
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        node.id === id ? { ...node, collapsed: !node.collapsed } : node
+      )
+    })),
   undo: () =>
     set((state) => {
       if (state.past.length === 0) return state;

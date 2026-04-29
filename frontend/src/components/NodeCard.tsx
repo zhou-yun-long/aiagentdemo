@@ -1,10 +1,12 @@
-import { Check, CircleAlert, CircleX, ExternalLink } from 'lucide-react';
+import { Check, ChevronRight, CircleAlert, CircleX, ExternalLink } from 'lucide-react';
 import { executionStatusLabels, type MindNode } from '../shared/types/workspace';
 
 type NodeCardProps = {
   node: MindNode;
   selected: boolean;
+  hasChildren?: boolean;
   onSelect: (id: string) => void;
+  onToggleCollapse?: (id: string) => void;
 };
 
 const statusIcon = {
@@ -13,7 +15,7 @@ const statusIcon = {
   fail: <CircleX size={13} />
 };
 
-export function NodeCard({ node, selected, onSelect }: NodeCardProps) {
+export function NodeCard({ node, selected, hasChildren, onSelect, onToggleCollapse }: NodeCardProps) {
   return (
     <>
       <button
@@ -21,6 +23,15 @@ export function NodeCard({ node, selected, onSelect }: NodeCardProps) {
         data-node-id={node.id}
         onClick={() => onSelect(node.id)}
       >
+        {hasChildren && (
+          <span
+            className={`collapse-toggle${node.collapsed ? ' collapsed' : ''}`}
+            onClick={(e) => { e.stopPropagation(); onToggleCollapse?.(node.id); }}
+            title={node.collapsed ? '展开' : '折叠'}
+          >
+            <ChevronRight size={12} />
+          </span>
+        )}
         {node.status && <span className={`status ${node.status}`}>{statusIcon[node.status]}</span>}
         {node.priority && <span className={`priority ${node.priority.toLowerCase()}`}>{node.priority}</span>}
         <span className="node-title">{node.title}</span>
