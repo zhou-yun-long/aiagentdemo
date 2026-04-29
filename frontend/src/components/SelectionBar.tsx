@@ -90,6 +90,20 @@ export function SelectionBar({ node, lastSnapshotAt, readOnly, onUpdate, onAddCh
         placeholder="标签"
         aria-label="标签"
       />
+      <input
+        className="url-input"
+        value={node.linkUrl || ''}
+        onChange={(event) => onUpdate(node.id, { linkUrl: event.target.value || undefined })}
+        placeholder="链接 URL"
+        aria-label="链接 URL"
+      />
+      <input
+        className="url-input"
+        value={node.imageUrl || ''}
+        onChange={(event) => onUpdate(node.id, { imageUrl: event.target.value || undefined })}
+        placeholder="图片 URL"
+        aria-label="图片 URL"
+      />
       {lastSnapshotAt && <small>快照 {lastSnapshotAt}</small>}
       <button onClick={onAddChild}>新增下级</button>
       <button>重新生成本阶段</button>

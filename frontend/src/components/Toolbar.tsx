@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -7,6 +7,7 @@ import {
   Camera,
   ChevronDown,
   Download,
+  Eraser,
   FileText,
   FileSpreadsheet,
   FileType,
@@ -15,6 +16,7 @@ import {
   Link,
   List,
   Loader2,
+  Minimize,
   Moon,
   PanelRightOpen,
   Plus,
@@ -25,10 +27,11 @@ import {
   Share2,
   Sun,
   Trash2,
-  Wrench
+  Wrench,
+  ZoomIn
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import type { ThemeMode, WorkspaceStats } from '../shared/types/workspace';
+import type { MindNode, ThemeMode, WorkspaceStats } from '../shared/types/workspace';
 import type { ProjectDto } from '../shared/types/treeify';
 import type { ExportFormat } from '../utils/exportCases';
 
@@ -71,10 +74,14 @@ type ToolbarProps = {
   saving: boolean;
   saveResult: SaveResult | null;
   onSave: () => void;
+  selectedId?: string;
+  onUpdate: (id: string, patch: Partial<MindNode>) => void;
+  onClearExecution: () => void;
+  onSnapshot: () => void;
+  onFit: () => void;
 };
 
 const priorities = ['P0', 'P1', 'P2', 'P3'];
-const tags = ['前置条件', '执行步骤', '预期结果', 'iOS', 'Android', 'Web', 'AI', '缓存', '数据', '变更'];
 
 export function Toolbar({
   stats,
@@ -109,16 +116,68 @@ export function Toolbar({
   dirty,
   saving,
   saveResult,
-  onSave
+  onSave,
+  selectedId,
+  onUpdate,
+  onClearExecution,
+  onSnapshot,
+  onFit
 }: ToolbarProps) {
   const navigate = useNavigate();
   const failedRate = stats.totalCases ? Math.round((stats.failedCases / stats.totalCases) * 10000) / 100 : 0;
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
+  const [toolOpen, setToolOpen] = useState(false);
+  const toolRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [tagList, setTagList] = useState(['前置条件', '执行步骤', '预期结果', 'iOS', 'Android', 'Web', 'AI', '缓存', '数据', '变更']);
+  const [addingTag, setAddingTag] = useState(false);
+  const [newTagValue, setNewTagValue] = useState('');
 
   const handleExport = (format: ExportFormat) => {
     setExportOpen(false);
     onExportCases(format);
+  };
+
+  const handleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleChange);
+    return () => document.removeEventListener('fullscreenchange', handleChange);
+  }, []);
+
+  const handleLink = () => {
+    if (!selectedId) return;
+    const url = window.prompt('请输入链接 URL', '');
+    if (url !== null) {
+      onUpdate(selectedId, { linkUrl: url || undefined });
+    }
+  };
+
+  const handleImage = () => {
+    if (!selectedId) return;
+    const url = window.prompt('请输入图片 URL', '');
+    if (url !== null) {
+      onUpdate(selectedId, { imageUrl: url || undefined });
+    }
+  };
+
+  const handleAddTag = () => {
+    const trimmed = newTagValue.trim();
+    if (trimmed && !tagList.includes(trimmed)) {
+      setTagList((prev) => [...prev, trimmed]);
+    }
+    setNewTagValue('');
+    setAddingTag(false);
   };
 
   useEffect(() => {
@@ -131,6 +190,17 @@ export function Toolbar({
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [exportOpen]);
+
+  useEffect(() => {
+    if (!toolOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (toolRef.current && !toolRef.current.contains(e.target as Node)) {
+        setToolOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [toolOpen]);
 
   return (
     <header className="toolbar">
@@ -221,9 +291,9 @@ export function Toolbar({
           <button className="icon" onClick={onToggleTheme} aria-label="切换主题">
             {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
-          <button className="ghost">
-            <Fullscreen size={15} />
-            全屏
+          <button className="ghost" onClick={handleFullscreen}>
+            {isFullscreen ? <Minimize size={15} /> : <Fullscreen size={15} />}
+            {isFullscreen ? '退出全屏' : '全屏'}
           </button>
         </div>
       </div>
@@ -256,11 +326,11 @@ export function Toolbar({
           <Trash2 size={15} />
           删除
         </button>
-        <button className="tool">
+        <button className="tool" onClick={handleLink}>
           <Link size={15} />
           链接
         </button>
-        <button className="tool">
+        <button className="tool" onClick={handleImage}>
           <Image size={15} />
           图片
         </button>
@@ -271,10 +341,28 @@ export function Toolbar({
         {saveResult && (
           <span className={`save-result ${saveResult.type}`}>{saveResult.message}</span>
         )}
-        <button className="tool">
-          <Wrench size={15} />
-          工具
-        </button>
+        <div className="tool-dropdown" ref={toolRef}>
+          <button className="tool" onClick={() => setToolOpen((v) => !v)}>
+            <Wrench size={15} />
+            工具
+          </button>
+          {toolOpen && (
+            <div className="tool-menu">
+              <button onClick={() => { onClearExecution(); setToolOpen(false); }}>
+                <Eraser size={14} />
+                清除执行记录
+              </button>
+              <button onClick={() => { onSnapshot(); setToolOpen(false); }}>
+                <Camera size={14} />
+                快照当前结果
+              </button>
+              <button onClick={() => { onFit(); setToolOpen(false); }}>
+                <ZoomIn size={14} />
+                适应画布
+              </button>
+            </div>
+          )}
+        </div>
         <button className="tool">
           <PanelRightOpen size={15} />
           自动化
@@ -291,12 +379,27 @@ export function Toolbar({
           ))}
         </div>
         <div className="tags">
-          {tags.map((tag) => (
+          {tagList.map((tag) => (
             <span className="tag" key={tag}>
               {tag}
             </span>
           ))}
-          <button className="add-tag">+ 新增</button>
+          {addingTag ? (
+            <input
+              className="add-tag-input"
+              value={newTagValue}
+              onChange={(e) => setNewTagValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAddTag();
+                if (e.key === 'Escape') { setAddingTag(false); setNewTagValue(''); }
+              }}
+              onBlur={handleAddTag}
+              placeholder="标签名"
+              autoFocus
+            />
+          ) : (
+            <button className="add-tag" onClick={() => setAddingTag(true)}>+ 新增</button>
+          )}
         </div>
       </div>}
     </header>

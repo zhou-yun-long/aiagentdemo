@@ -30,6 +30,8 @@ export type MindNode = {
   lane: Lane;
   depth: number;
   order: number;
+  linkUrl?: string;
+  imageUrl?: string;
   layout?: {
     x?: number;
     y?: number;
