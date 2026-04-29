@@ -12,16 +12,60 @@ type OutlinePanelProps = {
 export function OutlinePanel({ nodes, selectedId, onSelect, onClose }: OutlinePanelProps) {
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState<ExecutionStatus | 'all'>('all');
-  const outlineNodes = useMemo(
-    () =>
-      nodes.filter((node) => {
-        const visibleKind = node.kind === 'root' || node.kind === 'group' || node.kind === 'case';
-        const matchKeyword = !keyword || node.title.toLowerCase().includes(keyword.toLowerCase());
-        const matchStatus = statusFilter === 'all' || node.executionStatus === statusFilter;
-        return visibleKind && matchKeyword && matchStatus;
-      }),
-    [keyword, nodes, statusFilter]
-  );
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+
+  const visibleNodes = useMemo(() => {
+    // First filter by kind
+    const kindFiltered = nodes.filter(
+      (node) => node.kind === 'root' || node.kind === 'group' || node.kind === 'case'
+    );
+
+    // Apply keyword and status filters
+    const filtered = kindFiltered.filter((node) => {
+      const matchKeyword = !keyword || node.title.toLowerCase().includes(keyword.toLowerCase());
+      const matchStatus = statusFilter === 'all' || node.executionStatus === statusFilter;
+      return matchKeyword && matchStatus;
+    });
+
+    // When searching, show all matches regardless of collapse
+    if (keyword) return filtered;
+
+    // Build set of visible ids: walk the tree, skip children of collapsed nodes
+    const filteredIds = new Set(filtered.map((n) => n.id));
+    const result: MindNode[] = [];
+    const childMap = new Map<string, MindNode[]>();
+    for (const node of kindFiltered) {
+      const parentId = node.parentId ?? '';
+      if (!childMap.has(parentId)) childMap.set(parentId, []);
+      childMap.get(parentId)!.push(node);
+    }
+
+    function walk(parentId: string) {
+      const children = childMap.get(parentId) || [];
+      for (const child of children) {
+        if (!filteredIds.has(child.id)) continue;
+        result.push(child);
+        if (!collapsed.has(child.id)) {
+          walk(child.id);
+        }
+      }
+    }
+
+    walk('');
+    return result;
+  }, [keyword, nodes, statusFilter, collapsed]);
+
+  const toggleCollapse = (nodeId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  };
 
   return (
     <aside className="outline">
@@ -47,17 +91,30 @@ export function OutlinePanel({ nodes, selectedId, onSelect, onClose }: OutlinePa
         </select>
       </div>
       <div className="tree-list">
-        {outlineNodes.map((node) => (
-          <button
-            className={`tree-item depth-${node.depth} ${selectedId === node.id ? 'selected' : ''}`}
-            key={node.id}
-            onClick={() => onSelect(node.id)}
-          >
-            <span className="chevron">›</span>
-            <span>{node.title}</span>
-            {node.executionStatus && <span className={`status-dot ${node.executionStatus}`} />}
-          </button>
-        ))}
+        {visibleNodes.map((node) => {
+          const hasChildren = nodes.some((n) => n.parentId === node.id && (n.kind === 'root' || n.kind === 'group' || n.kind === 'case'));
+          const isCollapsed = collapsed.has(node.id);
+          return (
+            <button
+              className={`tree-item depth-${node.depth} ${selectedId === node.id ? 'selected' : ''}`}
+              key={node.id}
+              onClick={() => onSelect(node.id)}
+            >
+              {hasChildren ? (
+                <span
+                  className={`chevron ${isCollapsed ? '' : 'expanded'}`}
+                  onClick={(e) => { e.stopPropagation(); toggleCollapse(node.id); }}
+                >
+                  ›
+                </span>
+              ) : (
+                <span className="chevron-placeholder" />
+              )}
+              <span>{node.title}</span>
+              {node.executionStatus && <span className={`status-dot ${node.executionStatus}`} />}
+            </button>
+          );
+        })}
       </div>
     </aside>
   );
