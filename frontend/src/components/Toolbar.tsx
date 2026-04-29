@@ -131,8 +131,11 @@ export function Toolbar({
   const toolRef = useRef<HTMLDivElement>(null);
   const [fontOpen, setFontOpen] = useState(false);
   const fontRef = useRef<HTMLDivElement>(null);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const appearanceRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentFont, setCurrentFont] = useState('Inter');
+  const [fontSize, setFontSize] = useState(14);
   const [tagList, setTagList] = useState(['前置条件', '执行步骤', '预期结果', 'iOS', 'Android', 'Web', 'AI', '缓存', '数据', '变更']);
   const [addingTag, setAddingTag] = useState(false);
   const [newTagValue, setNewTagValue] = useState('');
@@ -150,6 +153,12 @@ export function Toolbar({
     document.documentElement.style.setProperty('font-family', fontValue);
     setCurrentFont(fontName);
     setFontOpen(false);
+  };
+
+  const handleFontSize = (size: number) => {
+    const clamped = Math.min(20, Math.max(10, size));
+    document.documentElement.style.setProperty('font-size', `${clamped}px`);
+    setFontSize(clamped);
   };
 
   const handleExport = (format: ExportFormat) => {
@@ -231,6 +240,17 @@ export function Toolbar({
     return () => document.removeEventListener('mousedown', handleClick);
   }, [fontOpen]);
 
+  useEffect(() => {
+    if (!appearanceOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (appearanceRef.current && !appearanceRef.current.contains(e.target as Node)) {
+        setAppearanceOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [appearanceOpen]);
+
   return (
     <header className="toolbar">
       <div className="topline">
@@ -239,7 +259,53 @@ export function Toolbar({
             ‹
           </button>
           <button className="tab active">思路</button>
-          <button className="tab">外观</button>
+          <div className="tab-dropdown" ref={appearanceRef}>
+            <button className={`tab${appearanceOpen ? ' active' : ''}`} onClick={() => setAppearanceOpen((v) => !v)}>外观</button>
+            {appearanceOpen && (
+              <div className="appearance-panel">
+                <div className="appearance-section">
+                  <label>主题</label>
+                  <div className="appearance-row">
+                    <button className={`appearance-btn${theme === 'light' ? ' active' : ''}`} onClick={() => { if (theme !== 'light') onToggleTheme(); }}>
+                      <Sun size={14} /> 浅色
+                    </button>
+                    <button className={`appearance-btn${theme === 'dark' ? ' active' : ''}`} onClick={() => { if (theme !== 'dark') onToggleTheme(); }}>
+                      <Moon size={14} /> 深色
+                    </button>
+                  </div>
+                </div>
+                <div className="appearance-section">
+                  <label>字体</label>
+                  <div className="appearance-font-list">
+                    {fontOptions.map((font) => (
+                      <button
+                        key={font.label}
+                        className={`appearance-btn${currentFont === font.label ? ' active' : ''}`}
+                        style={{ fontFamily: font.value }}
+                        onClick={() => handleFontChange(font.label, font.value)}
+                      >
+                        {font.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="appearance-section">
+                  <label>字号: {fontSize}px</label>
+                  <div className="appearance-row">
+                    <button className="appearance-btn" onClick={() => handleFontSize(fontSize - 1)} disabled={fontSize <= 10}>A-</button>
+                    <input
+                      type="range"
+                      min={10}
+                      max={20}
+                      value={fontSize}
+                      onChange={(e) => handleFontSize(Number(e.target.value))}
+                    />
+                    <button className="appearance-btn" onClick={() => handleFontSize(fontSize + 1)} disabled={fontSize >= 20}>A+</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
           <button className="tab">视图</button>
         </div>
         <div className="stats">
