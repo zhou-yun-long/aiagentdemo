@@ -2,9 +2,14 @@
 .DS_Store
 .env
 .env.swp
+node_modules/
 
 # IDE
 .idea/
+
+# Claude Code
+.claude/
+.mcp.json
 
 # Backend (Java/Maven)
 target/
@@ -14,6 +19,9 @@ data/
 frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
+
+# Test results
+test-results/
 
 # Images (project analysis docs)
 *.jpg
