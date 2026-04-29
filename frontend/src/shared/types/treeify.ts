@@ -12,6 +12,11 @@ export type ProjectDto = {
   updatedAt: string;
 };
 
+export type ProjectRequest = {
+  name: string;
+  description: string;
+};
+
 export type CreateGenerateTaskRequest = {
   mode: GenerationMode;
   input: string;

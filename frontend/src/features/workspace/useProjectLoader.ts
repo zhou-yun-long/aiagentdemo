@@ -144,17 +144,22 @@ export function useProjectLoader() {
   const loadFromApi = useCallback(async () => {
     const allProjects = await listProjects();
     setProjects(allProjects);
-    const activeProject = allProjects.find((project) => project.status === 'active');
 
-    if (!activeProject) {
+    // Deep-link support: check URL for projectId param
+    const urlProjectId = new URLSearchParams(window.location.search).get('projectId');
+    const targetProject = urlProjectId
+      ? allProjects.find((p) => p.id === Number(urlProjectId))
+      : allProjects.find((project) => project.status === 'active');
+
+    if (!targetProject) {
       setNodes(initialMindNodes);
       setServerStats(null);
       setPageStatus('empty');
       return;
     }
 
-    useWorkspaceStore.setState({ currentProjectId: activeProject.id });
-    await loadCases(activeProject.id, activeProject.name);
+    useWorkspaceStore.setState({ currentProjectId: targetProject.id });
+    await loadCases(targetProject.id, targetProject.name);
   }, [loadCases, setNodes, setPageStatus, setServerStats]);
 
   const switchProject = useCallback(async (projectId: number) => {

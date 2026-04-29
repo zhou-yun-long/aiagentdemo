@@ -9,6 +9,7 @@ import type {
   MindmapNodeDto,
   ModelParams,
   ProjectDto,
+  ProjectRequest,
   ProjectSummaryDto,
   ShareDataDto,
   ShareDto,
@@ -31,6 +32,26 @@ export function getDefaultProjectId() {
 
 export function listProjects() {
   return request<ProjectDto[]>('/api/v1/projects');
+}
+
+export function createProject(body: ProjectRequest) {
+  return request<ProjectDto>('/api/v1/projects', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+}
+
+export function updateProject(projectId: number, body: ProjectRequest) {
+  return request<ProjectDto>(`/api/v1/projects/${projectId}`, {
+    method: 'PUT',
+    body: JSON.stringify(body)
+  });
+}
+
+export function archiveProject(projectId: number) {
+  return request<void>(`/api/v1/projects/${projectId}`, {
+    method: 'DELETE'
+  });
 }
 
 export function getProject(projectId = getDefaultProjectId()) {
