@@ -2,12 +2,16 @@ import { create } from 'zustand';
 import { initialMindNodes } from '../../data/mindMap';
 import type { ExecutionStatus, Lane, MindNode, NodeKind, Priority, ThemeMode, WorkspaceStats } from '../../shared/types/workspace';
 
+const MAX_HISTORY = 50;
+
 const laneOrder: Lane[] = ['upper', 'middle', 'lower'];
 
 export type PageStatus = 'loading' | 'ready' | 'empty' | 'error';
 
 type WorkspaceState = {
   nodes: MindNode[];
+  past: MindNode[][];
+  future: MindNode[][];
   serverStats: WorkspaceStats | null;
   selectedId: string;
   theme: ThemeMode;
@@ -28,6 +32,8 @@ type WorkspaceState = {
   statusDirtyIds: string[];
   deletedCaseIds: string[];
   selectNode: (id: string) => void;
+  undo: () => void;
+  redo: () => void;
   toggleTheme: () => void;
   setReadOnly: (v: boolean) => void;
   toggleAssistant: () => void;
@@ -213,6 +219,8 @@ function getCaseParent(nodes: MindNode[], selectedId: string) {
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   nodes: cloneNodes(initialMindNodes),
+  past: [],
+  future: [],
   serverStats: null,
   selectedId: 'success-steps',
   theme: 'light',
@@ -232,6 +240,26 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   statusDirtyIds: [],
   deletedCaseIds: [],
   selectNode: (id) => set({ selectedId: id }),
+  undo: () =>
+    set((state) => {
+      if (state.past.length === 0) return state;
+      const previous = state.past[state.past.length - 1];
+      return {
+        nodes: previous,
+        past: state.past.slice(0, -1),
+        future: [cloneNodes(state.nodes), ...state.future].slice(0, MAX_HISTORY)
+      };
+    }),
+  redo: () =>
+    set((state) => {
+      if (state.future.length === 0) return state;
+      const next = state.future[0];
+      return {
+        nodes: next,
+        past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
+        future: state.future.slice(1)
+      };
+    }),
   toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
   setReadOnly: (v) => set({ readOnly: v }),
   toggleAssistant: () => set((state) => ({ assistantOpen: !state.assistantOpen })),
@@ -251,6 +279,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       const patchKeys = Object.keys(patch);
       const statusOnly = patchKeys.length === 1 && patchKeys[0] === 'executionStatus';
       return {
+        past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
+        future: [],
         nodes: state.nodes.map((node) =>
           node.id === id
             ? {
@@ -287,6 +317,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       const node = makeNode(kind, parent, lane, depth, order);
 
       return {
+        past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
+        future: [],
         nodes: [...state.nodes, node],
         selectedId: node.id,
         dirty: true
@@ -301,7 +333,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           return state;
         }
         const node = makeNode('group', root, 'middle', 1, getNextOrder(state.nodes, root.id, 'middle', 1));
-        return { nodes: [...state.nodes, node], selectedId: node.id, dirty: true };
+        return { past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY), future: [], nodes: [...state.nodes, node], selectedId: node.id, dirty: true };
       }
 
       const parent = state.nodes.find((node) => node.id === selected.parentId);
@@ -309,6 +341,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       const node = makeNode(selected.kind, parent, selected.lane, selected.depth, order);
 
       return {
+        past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
+        future: [],
         nodes: [...state.nodes, node],
         selectedId: node.id,
         dirty: true
@@ -323,6 +357,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
       const deleteIds = getDescendantIds(state.nodes, selected.id);
       return {
+        past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
+        future: [],
         nodes: state.nodes.filter((node) => !deleteIds.has(node.id)),
         selectedId: selected.parentId || 'root',
         dirty: true,
@@ -348,6 +384,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       const targetIds = getDescendantIds(state.nodes, target.id);
 
       return {
+        past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
+        future: [],
         nodes: state.nodes.map((node) => {
           if (selectedIds.has(node.id)) {
             return {
@@ -372,6 +410,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   fitZoom: () => set({ zoom: 0.8 }),
   clearExecutionRecords: () =>
     set((state) => ({
+      past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
+      future: [],
       nodes: state.nodes.map((node) =>
         node.kind === 'case'
           ? {
@@ -469,12 +509,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       });
 
       return {
+        past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
+        future: [],
         nodes: [...state.nodes, ...createdNodes],
         selectedId: createdNodes[0]?.id || state.selectedId,
         dirty: true
       };
     }),
-  setNodes: (nodes) => set({ nodes: cloneNodes(nodes), dirty: false, caseDirtyIds: [], statusDirtyIds: [], deletedCaseIds: [] }),
+  setNodes: (nodes) => set({ nodes: cloneNodes(nodes), past: [], future: [], dirty: false, caseDirtyIds: [], statusDirtyIds: [], deletedCaseIds: [] }),
   setServerStats: (stats) => set({ serverStats: stats }),
   setPageStatus: (status, error) => set({ pageStatus: status, pageError: error ?? null }),
   markClean: () => set({ dirty: false }),

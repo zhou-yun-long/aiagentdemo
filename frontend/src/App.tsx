@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AiAssistantPanel } from './components/AiAssistantPanel';
 import { IntegrationPanel } from './components/IntegrationPanel';
 import { KnowledgePanel } from './components/KnowledgePanel';
@@ -82,8 +82,27 @@ export default function App() {
   const currentProjectId = useWorkspaceStore((state) => state.currentProjectId);
   const appendAiRows = useWorkspaceStore((state) => state.appendAiRows);
   const setNodes = useWorkspaceStore((state) => state.setNodes);
+  const canUndo = useWorkspaceStore((state) => state.past.length > 0);
+  const canRedo = useWorkspaceStore((state) => state.future.length > 0);
+  const undo = useWorkspaceStore((state) => state.undo);
+  const redo = useWorkspaceStore((state) => state.redo);
 
   const [shareOpen, setShareOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (isMod && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   const { pageStatus, pageError, projects, switchProject } = useProjectLoader();
   const { save, saving, saveResult } = useMindmapSave();
@@ -126,7 +145,13 @@ export default function App() {
         onToggleKnowledge={toggleKnowledge}
         snapshotOpen={snapshotOpen}
         onToggleSnapshot={toggleSnapshot}
+        outlineOpen={outlineOpen}
+        onToggleOutline={toggleOutline}
         onToggleTheme={toggleTheme}
+        onUndo={undo}
+        canUndo={canUndo}
+        onRedo={redo}
+        canRedo={canRedo}
         onAddChild={addChildNode}
         onAddSibling={addSiblingNode}
         onDelete={deleteSelectedNode}

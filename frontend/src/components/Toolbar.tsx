@@ -13,11 +13,13 @@ import {
   Fullscreen,
   Image,
   Link,
+  List,
   Loader2,
   Moon,
   PanelRightOpen,
   Plus,
   RotateCcw,
+  RotateCw,
   Save,
   Settings,
   Share2,
@@ -25,6 +27,7 @@ import {
   Trash2,
   Wrench
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { ThemeMode, WorkspaceStats } from '../shared/types/workspace';
 import type { ProjectDto } from '../shared/types/treeify';
 import type { ExportFormat } from '../utils/exportCases';
@@ -50,6 +53,10 @@ type ToolbarProps = {
   onToggleKnowledge: () => void;
   snapshotOpen: boolean;
   onToggleSnapshot: () => void;
+  onUndo: () => void;
+  canUndo: boolean;
+  onRedo: () => void;
+  canRedo: boolean;
   onAddChild: () => void;
   onAddSibling: () => void;
   onDelete: () => void;
@@ -58,6 +65,8 @@ type ToolbarProps = {
   onExportCases: (format: ExportFormat) => void;
   onToggleShare: () => void;
   onToggleIntegration: () => void;
+  outlineOpen: boolean;
+  onToggleOutline: () => void;
   dirty: boolean;
   saving: boolean;
   saveResult: SaveResult | null;
@@ -83,6 +92,10 @@ export function Toolbar({
   onToggleKnowledge,
   snapshotOpen,
   onToggleSnapshot,
+  onUndo,
+  canUndo,
+  onRedo,
+  canRedo,
   onAddChild,
   onAddSibling,
   onDelete,
@@ -91,11 +104,14 @@ export function Toolbar({
   onExportCases,
   onToggleShare,
   onToggleIntegration,
+  outlineOpen,
+  onToggleOutline,
   dirty,
   saving,
   saveResult,
   onSave
 }: ToolbarProps) {
+  const navigate = useNavigate();
   const failedRate = stats.totalCases ? Math.round((stats.failedCases / stats.totalCases) * 10000) / 100 : 0;
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -120,7 +136,7 @@ export function Toolbar({
     <header className="toolbar">
       <div className="topline">
         <div className="tabs">
-          <button className="back-button" aria-label="返回">
+          <button className="back-button" aria-label="返回" onClick={() => navigate('/projects')}>
             ‹
           </button>
           <button className="tab active">思路</button>
@@ -151,6 +167,10 @@ export function Toolbar({
           )}
         </div>
         <div className="actions">
+          <button className="ghost" onClick={onToggleOutline}>
+            <List size={15} />
+            {outlineOpen ? '关闭大纲' : '打开大纲'}
+          </button>
           <button className="ghost" onClick={onToggleAssistant}>
             <Bot size={15} />
             {assistantOpen ? '关闭AI助手' : '打开AI助手'}
@@ -208,9 +228,13 @@ export function Toolbar({
         </div>
       </div>
       {!readOnly && <div className="toolline">
-        <button className="tool disabled">
+        <button className={`tool${canUndo ? '' : ' disabled'}`} onClick={onUndo} disabled={!canUndo}>
           <RotateCcw size={15} />
           撤销
+        </button>
+        <button className={`tool${canRedo ? '' : ' disabled'}`} onClick={onRedo} disabled={!canRedo}>
+          <RotateCw size={15} />
+          重做
         </button>
         <button className="tool" onClick={onAddChild}>
           <Plus size={15} />
