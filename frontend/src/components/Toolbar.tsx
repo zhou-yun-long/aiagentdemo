@@ -176,6 +176,8 @@ export function Toolbar({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [nodeFontOpen, setNodeFontOpen] = useState(false);
   const nodeFontRef = useRef<HTMLDivElement>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const editRef = useRef<HTMLDivElement>(null);
   const [nodeSelectOpen, setNodeSelectOpen] = useState(false);
   const nodeSelectRef = useRef<HTMLDivElement>(null);
   const [currentFont, setCurrentFont] = useState('Inter');
@@ -309,6 +311,17 @@ export function Toolbar({
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [nodeFontOpen]);
+
+  useEffect(() => {
+    if (!editOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (editRef.current && !editRef.current.contains(e.target as Node)) {
+        setEditOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [editOpen]);
 
   useEffect(() => {
     if (!nodeSelectOpen) return;
@@ -512,29 +525,39 @@ export function Toolbar({
           <Plus size={15} />
           插入同级
         </button>
-        <button className="tool" onClick={onMoveUp}>
-          <ArrowUp size={15} />
-          上移
-        </button>
-        <button className="tool" onClick={onMoveDown}>
-          <ArrowDown size={15} />
-          下移
-        </button>
-        <button className="tool" onClick={onAutoBalanceMap}>
-          <GitBranch size={15} />
-          自动平衡布局
-        </button>
+        <div className="tool-dropdown" ref={editRef}>
+          <button className="tool" onClick={() => setEditOpen((v) => !v)}>
+            <Settings size={15} />
+            编辑
+          </button>
+          {editOpen && (
+            <div className="tool-menu">
+              <button onClick={() => { onMoveUp(); setEditOpen(false); }}>
+                <ArrowUp size={14} />
+                上移
+              </button>
+              <button onClick={() => { onMoveDown(); setEditOpen(false); }}>
+                <ArrowDown size={14} />
+                下移
+              </button>
+              <button onClick={() => { handleLink(); setEditOpen(false); }}>
+                <Link size={14} />
+                链接
+              </button>
+              <button onClick={() => { handleImage(); setEditOpen(false); }}>
+                <Image size={14} />
+                图片
+              </button>
+              <button onClick={() => { onAutoBalanceMap(); setEditOpen(false); }}>
+                <GitBranch size={14} />
+                自动平衡布局
+              </button>
+            </div>
+          )}
+        </div>
         <button className="tool danger" onClick={onDelete}>
           <Trash2 size={15} />
           删除
-        </button>
-        <button className="tool" onClick={handleLink}>
-          <Link size={15} />
-          链接
-        </button>
-        <button className="tool" onClick={handleImage}>
-          <Image size={15} />
-          图片
         </button>
         {selectedId && (
           <div className="node-font-controls">
@@ -572,7 +595,7 @@ export function Toolbar({
             <div className="tool-dropdown" ref={nodeFontRef}>
               <button className="tool" onClick={() => setNodeFontOpen((v) => !v)} title="节点字体">
                 <Type size={15} />
-                字体 · {selectedFontLabel} · {selectedNodeFontSize}px
+                字体
               </button>
               {nodeFontOpen && (
                 <div className="tool-menu node-font-menu">
@@ -677,17 +700,17 @@ export function Toolbar({
                 <Trash2 size={14} />
                 清空画布
               </button>
+              <button onClick={() => { setToolOpen(false); }}>
+                <PanelRightOpen size={14} />
+                自动化
+              </button>
+              <button onClick={() => { onToggleIntegration(); setToolOpen(false); }}>
+                <Settings size={14} />
+                集成设置
+              </button>
             </div>
           )}
         </div>
-        <button className="tool">
-          <PanelRightOpen size={15} />
-          自动化
-        </button>
-        <button className="tool" onClick={onToggleIntegration}>
-          <Settings size={15} />
-          集成设置
-        </button>
         <div className="pills">
           {priorities.map((item) => (
             <span className={`priority ${item.toLowerCase()}`} key={item}>
