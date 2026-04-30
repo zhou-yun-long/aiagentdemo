@@ -26,6 +26,7 @@ function mindmapDtoToMindNode(dto: MindmapNodeDto): MindNode {
     order: dto.order,
     fontFamily: dto.fontFamily,
     fontSize: dto.fontSize,
+    fontWeight: dto.fontWeight,
     layout: dto.layout
   };
 }

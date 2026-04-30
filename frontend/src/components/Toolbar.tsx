@@ -5,6 +5,7 @@ import {
   BookOpen,
   Bot,
   Camera,
+  CheckSquare,
   Download,
   FileText,
   FileSpreadsheet,
@@ -30,9 +31,19 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import type { MindNode, ThemeMode, WorkspaceStats } from '../shared/types/workspace';
+import type { MindNode, NodeKind, ThemeMode, WorkspaceStats } from '../shared/types/workspace';
 import type { ProjectDto } from '../shared/types/treeify';
 import type { ExportFormat } from '../utils/exportCases';
+import {
+  clampNodeFontSize,
+  defaultNodeFontSize,
+  getNodeFontLabel,
+  maxNodeFontSize,
+  minNodeFontSize,
+  nodeFontOptions,
+  nodeFontSizePresets,
+  nodeFontWeightOptions
+} from '../shared/nodeTypography';
 
 type SaveResult = {
   type: 'success' | 'error';
@@ -75,9 +86,14 @@ type ToolbarProps = {
   saveResult: SaveResult | null;
   onSave: () => void;
   selectedId?: string;
+  selectedIds?: string[];
   selectedFontFamily?: string;
   selectedFontSize?: number;
+  selectedFontWeight?: number;
+  nodeKindCounts: Record<NodeKind, number>;
+  onSelectAll?: (kind?: NodeKind) => void;
   onUpdate: (id: string, patch: Partial<MindNode>) => void;
+  onUpdateNodes?: (ids: string[], patch: Partial<MindNode>) => void;
   onClearCanvas: () => void;
   onFit: () => void;
   zoom: number;
@@ -86,6 +102,16 @@ type ToolbarProps = {
 };
 
 const priorities = ['P0', 'P1', 'P2', 'P3'];
+
+const nodeSelectOptions: Array<{ label: string; kind?: NodeKind }> = [
+  { label: '全部节点' },
+  { label: '中心主题', kind: 'root' },
+  { label: '模块', kind: 'group' },
+  { label: '用例', kind: 'case' },
+  { label: '前置条件', kind: 'condition' },
+  { label: '执行步骤', kind: 'step' },
+  { label: '预期结果', kind: 'expected' }
+];
 
 export function Toolbar({
   stats,
@@ -123,9 +149,14 @@ export function Toolbar({
   saveResult,
   onSave,
   selectedId,
+  selectedIds,
   selectedFontFamily,
   selectedFontSize,
+  selectedFontWeight,
+  nodeKindCounts,
+  onSelectAll,
   onUpdate,
+  onUpdateNodes,
   onClearCanvas,
   onFit,
   zoom,
@@ -145,20 +176,27 @@ export function Toolbar({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [nodeFontOpen, setNodeFontOpen] = useState(false);
   const nodeFontRef = useRef<HTMLDivElement>(null);
+  const [nodeSelectOpen, setNodeSelectOpen] = useState(false);
+  const nodeSelectRef = useRef<HTMLDivElement>(null);
   const [currentFont, setCurrentFont] = useState('Inter');
   const [fontSize, setFontSize] = useState(14);
   const [tagList, setTagList] = useState(['前置条件', '执行步骤', '预期结果', 'iOS', 'Android', 'Web', 'AI', '缓存', '数据', '变更']);
   const [addingTag, setAddingTag] = useState(false);
   const [newTagValue, setNewTagValue] = useState('');
 
-  const fontOptions = [
-    { label: 'Inter', value: 'Inter, ui-sans-serif, system-ui, sans-serif' },
-    { label: '系统默认', value: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' },
-    { label: '微软雅黑', value: '"Microsoft YaHei", "PingFang SC", sans-serif' },
-    { label: '宋体', value: '"SimSun", "Songti SC", serif' },
-    { label: '等宽字体', value: '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, monospace' },
-    { label: 'Serif', value: 'Georgia, "Times New Roman", serif' },
-  ];
+  const appFontOptions = nodeFontOptions.filter((font): font is { label: string; value: string } => Boolean(font.value));
+  const selectedFontLabel = getNodeFontLabel(selectedFontFamily);
+  const selectedNodeFontSize = selectedFontSize ?? defaultNodeFontSize;
+
+  const applyFont = (patch: Partial<MindNode>) => {
+    const ids = selectedIds && selectedIds.length > 0 ? selectedIds : selectedId ? [selectedId] : [];
+    if (ids.length === 0) return;
+    if (ids.length === 1) {
+      onUpdate(ids[0], patch);
+    } else if (onUpdateNodes) {
+      onUpdateNodes(ids, patch);
+    }
+  };
 
   const handleFontChange = (fontName: string, fontValue: string) => {
     document.documentElement.style.setProperty('font-family', fontValue);
@@ -272,6 +310,17 @@ export function Toolbar({
     return () => document.removeEventListener('mousedown', handleClick);
   }, [nodeFontOpen]);
 
+  useEffect(() => {
+    if (!nodeSelectOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (nodeSelectRef.current && !nodeSelectRef.current.contains(e.target as Node)) {
+        setNodeSelectOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [nodeSelectOpen]);
+
   return (
     <header className="toolbar">
       <div className="topline">
@@ -298,7 +347,7 @@ export function Toolbar({
                 <div className="appearance-section">
                   <label>字体</label>
                   <div className="appearance-font-list">
-                    {fontOptions.map((font) => (
+                    {appFontOptions.map((font) => (
                       <button
                         key={font.label}
                         className={`appearance-btn${currentFont === font.label ? ' active' : ''}`}
@@ -489,55 +538,125 @@ export function Toolbar({
         </button>
         {selectedId && (
           <div className="node-font-controls">
-            <div className="tool-dropdown" ref={nodeFontRef}>
-              <button className="tool" onClick={() => setNodeFontOpen((v) => !v)} title="节点字体">
-                <Type size={15} />
-                {selectedFontFamily ? fontOptions.find(f => selectedFontFamily.includes(f.label))?.label || '自定义' : '字体'}
+            {selectedIds && selectedIds.length > 1 && (
+              <span className="tool-label">{selectedIds.length} 个节点</span>
+            )}
+            <div className="tool-dropdown" ref={nodeSelectRef}>
+              <button className="tool" onClick={() => setNodeSelectOpen((v) => !v)} title="按节点类别选择">
+                <CheckSquare size={15} />
+                选择
               </button>
-              {nodeFontOpen && (
-                <div className="tool-menu node-font-menu">
-                  <button
-                    className={!selectedFontFamily ? 'active' : ''}
-                    onClick={() => { if (selectedId) onUpdate(selectedId, { fontFamily: undefined }); setNodeFontOpen(false); }}
-                  >
-                    默认
-                  </button>
-                  {fontOptions.map((font) => (
-                    <button
-                      key={font.label}
-                      className={selectedFontFamily === font.value ? 'active' : ''}
-                      style={{ fontFamily: font.value }}
-                      onClick={() => { if (selectedId) onUpdate(selectedId, { fontFamily: font.value }); setNodeFontOpen(false); }}
-                    >
-                      {font.label}
-                    </button>
-                  ))}
+              {nodeSelectOpen && (
+                <div className="tool-menu node-select-menu">
+                  {nodeSelectOptions.map((option) => {
+                    const count = option.kind
+                      ? nodeKindCounts[option.kind]
+                      : Object.values(nodeKindCounts).reduce((sum, item) => sum + item, 0);
+                    return (
+                      <button
+                        key={option.kind || 'all'}
+                        onClick={() => {
+                          onSelectAll?.(option.kind);
+                          setNodeSelectOpen(false);
+                        }}
+                        disabled={count === 0}
+                      >
+                        <span>{option.label}</span>
+                        <span className="node-select-count">{count}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
-            <button
-              className="tool compact"
-              onClick={() => {
-                if (!selectedId) return;
-                const cur = selectedFontSize ?? 13;
-                onUpdate(selectedId, { fontSize: Math.max(10, cur - 1) });
-              }}
-              title="减小字号"
-            >
-              A-
-            </button>
-            <span className="tool-label">{selectedFontSize ?? 13}px</span>
-            <button
-              className="tool compact"
-              onClick={() => {
-                if (!selectedId) return;
-                const cur = selectedFontSize ?? 13;
-                onUpdate(selectedId, { fontSize: Math.min(24, cur + 1) });
-              }}
-              title="增大字号"
-            >
-              A+
-            </button>
+            <div className="tool-dropdown" ref={nodeFontRef}>
+              <button className="tool" onClick={() => setNodeFontOpen((v) => !v)} title="节点字体">
+                <Type size={15} />
+                字体 · {selectedFontLabel} · {selectedNodeFontSize}px
+              </button>
+              {nodeFontOpen && (
+                <div className="tool-menu node-font-menu">
+                  <div className="node-font-section">
+                    <span className="node-font-section-title">字体</span>
+                    <div className="node-font-family-grid">
+                      {nodeFontOptions.map((font) => (
+                        <button
+                          key={font.label}
+                          className={selectedFontFamily === font.value || (!selectedFontFamily && !font.value) ? 'active' : ''}
+                          style={{ fontFamily: font.value }}
+                          onClick={() => applyFont({ fontFamily: font.value })}
+                        >
+                          {font.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="node-font-section">
+                    <span className="node-font-section-title">字号</span>
+                    <div className="node-font-size-row">
+                      <button
+                        onClick={() => applyFont({ fontSize: clampNodeFontSize(selectedNodeFontSize - 1) })}
+                        disabled={selectedNodeFontSize <= minNodeFontSize}
+                      >
+                        A-
+                      </button>
+                      <input
+                        type="number"
+                        min={minNodeFontSize}
+                        max={maxNodeFontSize}
+                        value={selectedNodeFontSize}
+                        onChange={(e) => applyFont({ fontSize: clampNodeFontSize(Number(e.target.value)) })}
+                      />
+                      <button
+                        onClick={() => applyFont({ fontSize: clampNodeFontSize(selectedNodeFontSize + 1) })}
+                        disabled={selectedNodeFontSize >= maxNodeFontSize}
+                      >
+                        A+
+                      </button>
+                    </div>
+                    <input
+                      type="range"
+                      min={minNodeFontSize}
+                      max={maxNodeFontSize}
+                      value={selectedNodeFontSize}
+                      onChange={(e) => applyFont({ fontSize: clampNodeFontSize(Number(e.target.value)) })}
+                    />
+                    <div className="node-font-presets">
+                      {nodeFontSizePresets.map((size) => (
+                        <button
+                          key={size}
+                          className={selectedNodeFontSize === size ? 'active' : ''}
+                          onClick={() => applyFont({ fontSize: size })}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="node-font-section">
+                    <span className="node-font-section-title">字重</span>
+                    <div className="node-font-weight-row">
+                      {nodeFontWeightOptions.map((weight) => (
+                        <button
+                          key={weight.label}
+                          className={selectedFontWeight === weight.value || (!selectedFontWeight && !weight.value) ? 'active' : ''}
+                          style={{ fontWeight: weight.value || 400 }}
+                          onClick={() => applyFont({ fontWeight: weight.value })}
+                        >
+                          {weight.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    className="node-font-reset"
+                    onClick={() => applyFont({ fontFamily: undefined, fontSize: undefined, fontWeight: undefined })}
+                  >
+                    重置节点字体
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
         <button className="tool" disabled={!dirty || saving} onClick={onSave}>

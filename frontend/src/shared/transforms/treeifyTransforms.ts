@@ -193,6 +193,7 @@ export function mindNodeToDto(node: MindNode): MindmapNodeDto {
     order: node.order,
     fontFamily: node.fontFamily,
     fontSize: node.fontSize,
+    fontWeight: node.fontWeight,
     layout: node.layout ? { ...node.layout } : undefined
   };
 }
@@ -216,6 +217,7 @@ export function mindNodeFromDto(dto: MindmapNodeDto): MindNode {
     order: dto.order,
     fontFamily: dto.fontFamily,
     fontSize: dto.fontSize,
+    fontWeight: dto.fontWeight,
     layout: dto.layout ? { ...dto.layout } : undefined
   };
 }

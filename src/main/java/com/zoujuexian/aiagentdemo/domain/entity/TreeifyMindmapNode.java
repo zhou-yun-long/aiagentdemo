@@ -67,6 +67,8 @@ public class TreeifyMindmapNode {
 
     private Integer fontSize;
 
+    private Integer fontWeight;
+
     @Convert(converter = JsonMapConverter.class)
     @Column(length = 2000)
     private Map<String, Object> layout = new LinkedHashMap<>();
@@ -129,6 +131,9 @@ public class TreeifyMindmapNode {
 
     public Integer getFontSize() { return fontSize; }
     public void setFontSize(Integer fontSize) { this.fontSize = fontSize; }
+
+    public Integer getFontWeight() { return fontWeight; }
+    public void setFontWeight(Integer fontWeight) { this.fontWeight = fontWeight; }
 
     public Map<String, Object> getLayout() { return layout; }
     public void setLayout(Map<String, Object> layout) { this.layout = layout; }

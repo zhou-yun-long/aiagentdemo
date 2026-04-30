@@ -845,6 +845,34 @@ textarea {
   padding: 0 10px;
 }
 
+.selection-style-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 4px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+.selection-style-group select {
+  max-width: 112px;
+  padding: 0 6px;
+}
+
+.selection-style-group .font-size-input {
+  width: 52px;
+  padding: 0 6px;
+  text-align: center;
+}
+
+.selection-style-group .style-stepper {
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  font-weight: 600;
+}
+
 .selection-bar small {
   color: var(--muted);
   white-space: nowrap;
@@ -2470,6 +2498,11 @@ button.small:disabled {
   font-weight: 600;
 }
 
+.tool.compact.active {
+  color: var(--blue);
+  background: var(--surface-2);
+}
+
 .tool-label {
   min-width: 32px;
   text-align: center;
@@ -2478,8 +2511,97 @@ button.small:disabled {
   user-select: none;
 }
 
+.node-select-menu {
+  min-width: 168px;
+}
+
+.node-select-menu button {
+  justify-content: space-between;
+}
+
+.node-select-count {
+  margin-left: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .node-font-menu {
-  min-width: 120px;
+  width: 268px;
+  padding: 10px;
+}
+
+.node-font-section {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.node-font-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.node-font-family-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.node-font-menu .node-font-family-grid button,
+.node-font-menu .node-font-presets button,
+.node-font-menu .node-font-weight-row button,
+.node-font-menu .node-font-size-row button,
+.node-font-menu .node-font-reset {
+  justify-content: center;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.node-font-size-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  gap: 6px;
+}
+
+.node-font-size-row input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--surface);
+  text-align: center;
+}
+
+.node-font-menu input[type="range"] {
+  width: 100%;
+  accent-color: var(--blue);
+}
+
+.node-font-presets,
+.node-font-weight-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.node-font-weight-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.node-font-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.node-font-menu .node-font-reset {
+  width: 100%;
+  color: var(--muted);
 }
 
 /* Font dropdown */

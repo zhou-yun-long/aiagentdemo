@@ -16,7 +16,7 @@ import { useCasePersistence } from './features/workspace/useCasePersistence';
 import { useMindmapSave } from './features/workspace/useMindmapSave';
 import { useProjectLoader } from './features/workspace/useProjectLoader';
 import { useWorkspaceAutosave } from './features/workspace/useWorkspaceAutosave';
-import type { MindNode } from './shared/types/workspace';
+import type { MindNode, NodeKind } from './shared/types/workspace';
 
 function buildCaseExport(nodes: MindNode[]) {
   return nodes
@@ -50,6 +50,7 @@ export default function App() {
   const theme = useWorkspaceStore((state) => state.theme);
   const readOnly = useWorkspaceStore((state) => state.readOnly);
   const selectedId = useWorkspaceStore((state) => state.selectedId);
+  const selectedIds = useWorkspaceStore((state) => state.selectedIds);
   const assistantOpen = useWorkspaceStore((state) => state.assistantOpen);
   const outlineOpen = useWorkspaceStore((state) => state.outlineOpen);
   const summaryOpen = useWorkspaceStore((state) => state.summaryOpen);
@@ -59,6 +60,8 @@ export default function App() {
   const zoom = useWorkspaceStore((state) => state.zoom);
   const lastSnapshotAt = useWorkspaceStore((state) => state.lastSnapshotAt);
   const selectNode = useWorkspaceStore((state) => state.selectNode);
+  const selectAll = useWorkspaceStore((state) => state.selectAll);
+  const updateNodes = useWorkspaceStore((state) => state.updateNodes);
   const toggleCollapse = useWorkspaceStore((state) => state.toggleCollapse);
   const toggleTheme = useWorkspaceStore((state) => state.toggleTheme);
   const toggleAssistant = useWorkspaceStore((state) => state.toggleAssistant);
@@ -102,11 +105,14 @@ export default function App() {
       } else if (isMod && e.key === 'z' && e.shiftKey) {
         e.preventDefault();
         redo();
+      } else if (isMod && e.key === 'a') {
+        e.preventDefault();
+        selectAll();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo]);
+  }, [undo, redo, selectAll]);
 
   const { pageStatus, pageError, projects, switchProject } = useProjectLoader();
   const { save, saving, saveResult } = useMindmapSave();
@@ -114,8 +120,18 @@ export default function App() {
   useWorkspaceAutosave();
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
+  const effectiveSelectedIds = selectedIds.length > 0 ? selectedIds : selectedId ? [selectedId] : [];
   const localStats = useMemo(() => getWorkspaceStats(nodes), [nodes]);
   const stats = serverStats || localStats;
+  const nodeKindCounts = useMemo(() => {
+    return nodes.reduce<Record<NodeKind, number>>(
+      (counts, node) => {
+        counts[node.kind] += 1;
+        return counts;
+      },
+      { root: 0, group: 0, case: 0, condition: 0, step: 0, expected: 0 }
+    );
+  }, [nodes]);
 
   const handleExportCases = (format: ExportFormat) => {
     const cases: ExportCase[] = buildCaseExport(nodes);
@@ -181,9 +197,14 @@ export default function App() {
         saveResult={saveResult}
         onSave={save}
         selectedId={selectedId}
+        selectedIds={effectiveSelectedIds}
         selectedFontFamily={selectedNode?.fontFamily}
         selectedFontSize={selectedNode?.fontSize}
+        selectedFontWeight={selectedNode?.fontWeight}
+        nodeKindCounts={nodeKindCounts}
+        onSelectAll={selectAll}
         onUpdate={updateNode}
+        onUpdateNodes={updateNodes}
         onClearCanvas={handleClearCanvas}
         onFit={fitZoom}
         zoom={zoom}

@@ -34,6 +34,7 @@ export type MindNode = {
   imageUrl?: string;
   fontFamily?: string;
   fontSize?: number;
+  fontWeight?: number;
   layout?: {
     x?: number;
     y?: number;

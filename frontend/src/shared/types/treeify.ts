@@ -153,6 +153,7 @@ export type MindmapNodeDto = {
   order: number;
   fontFamily?: string;
   fontSize?: number;
+  fontWeight?: number;
   layout?: { x?: number; y?: number; width?: number; height?: number };
 };
 

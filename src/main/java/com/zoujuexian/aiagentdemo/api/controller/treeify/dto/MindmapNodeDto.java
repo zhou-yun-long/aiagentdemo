@@ -21,5 +21,6 @@ public record MindmapNodeDto(
         Integer order,
         String fontFamily,
         Integer fontSize,
+        Integer fontWeight,
         Map<String, Object> layout
 ) {}

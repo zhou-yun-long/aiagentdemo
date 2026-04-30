@@ -551,6 +551,7 @@ public class TreeifyPersistenceService {
                 entity.getOrderIndex(),
                 entity.getFontFamily(),
                 entity.getFontSize(),
+                entity.getFontWeight(),
                 entity.getLayout() == null ? Map.of() : Map.copyOf(entity.getLayout())
         );
     }
@@ -620,6 +621,7 @@ public class TreeifyPersistenceService {
         entity.setOrderIndex(node.order() == null ? fallbackOrder : node.order());
         entity.setFontFamily(blankToNull(node.fontFamily()));
         entity.setFontSize(node.fontSize());
+        entity.setFontWeight(node.fontWeight());
         entity.setLayout(node.layout() == null ? Map.of() : Map.copyOf(node.layout()));
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
@@ -660,6 +662,7 @@ public class TreeifyPersistenceService {
                     order,
                     null,
                     null,
+                    null,
                     testCase.layout()
             ));
             nodes.add(new MindmapNodeDto(
@@ -678,6 +681,7 @@ public class TreeifyPersistenceService {
                     lane,
                     3,
                     0,
+                    null,
                     null,
                     null,
                     Map.of()
@@ -700,6 +704,7 @@ public class TreeifyPersistenceService {
                     0,
                     null,
                     null,
+                    null,
                     Map.of()
             ));
             nodes.add(new MindmapNodeDto(
@@ -718,6 +723,7 @@ public class TreeifyPersistenceService {
                     lane,
                     5,
                     0,
+                    null,
                     null,
                     null,
                     Map.of()

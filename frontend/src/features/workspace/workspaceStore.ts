@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { initialMindNodes } from '../../data/mindMap';
 import type { ExecutionStatus, Lane, MindNode, NodeKind, Priority, ThemeMode, WorkspaceStats } from '../../shared/types/workspace';
+import { formatStepList } from '../../shared/transforms/treeifyTransforms';
+import { autoBalanceMindMap } from '../../utils/mindMapLayout';
 
 const MAX_HISTORY = 50;
 
@@ -14,6 +16,7 @@ type WorkspaceState = {
   future: MindNode[][];
   serverStats: WorkspaceStats | null;
   selectedId: string;
+  selectedIds: string[];
   theme: ThemeMode;
   readOnly: boolean;
   assistantOpen: boolean;
@@ -31,7 +34,10 @@ type WorkspaceState = {
   caseDirtyIds: string[];
   statusDirtyIds: string[];
   deletedCaseIds: string[];
+  layoutVersion: number;
   selectNode: (id: string) => void;
+  selectAll: (kind?: NodeKind) => void;
+  updateNodes: (ids: string[], patch: Partial<MindNode>) => void;
   toggleCollapse: (id: string) => void;
   undo: () => void;
   redo: () => void;
@@ -55,6 +61,8 @@ type WorkspaceState = {
   moveSelectedNode: (direction: 'up' | 'down') => void;
   setZoom: (zoom: number) => void;
   fitZoom: () => void;
+  autoBalanceMap: () => void;
+  clearCanvas: () => void;
   clearExecutionRecords: () => void;
   snapshotCurrentResult: () => void;
   appendAiRows: (rows: string[][]) => void;
@@ -182,6 +190,10 @@ function compareLayout(a: MindNode, b: MindNode) {
   return laneDelta || a.order - b.order || a.depth - b.depth;
 }
 
+function rebalance(nodes: MindNode[]): MindNode[] {
+  return autoBalanceMindMap(nodes);
+}
+
 export function getWorkspaceStats(nodes: MindNode[]): WorkspaceStats {
   const caseNodes = nodes.filter((node) => node.kind === 'case');
   const testedStatuses: ExecutionStatus[] = ['passed', 'failed', 'blocked', 'skipped'];
@@ -219,11 +231,12 @@ function getCaseParent(nodes: MindNode[], selectedId: string) {
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
-  nodes: cloneNodes(initialMindNodes),
+  nodes: rebalance(cloneNodes(initialMindNodes)),
   past: [],
   future: [],
   serverStats: null,
   selectedId: 'success-steps',
+  selectedIds: [],
   theme: 'light',
   readOnly: false,
   assistantOpen: true,
@@ -240,7 +253,32 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   caseDirtyIds: [],
   statusDirtyIds: [],
   deletedCaseIds: [],
-  selectNode: (id) => set({ selectedId: id }),
+  layoutVersion: 0,
+  selectNode: (id) => set({ selectedId: id, selectedIds: [] }),
+  selectAll: (kind) =>
+    set((state) => {
+      const selectedIds = state.nodes
+        .filter((node) => !kind || node.kind === kind)
+        .map((node) => node.id);
+      return {
+        selectedIds,
+        selectedId: selectedIds[0] || state.selectedId
+      };
+    }),
+  updateNodes: (ids, patch) =>
+    set((state) => {
+      const idSet = new Set(ids);
+      return {
+        past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
+        future: [],
+        nodes: state.nodes.map((node) =>
+          idSet.has(node.id)
+            ? { ...node, ...patch, version: (node.version || 1) + 1 }
+            : node
+        ),
+        dirty: true
+      };
+    }),
   toggleCollapse: (id) =>
     set((state) => ({
       nodes: state.nodes.map((node) =>
@@ -318,7 +356,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       }
 
       const kind = getChildKind(parent);
-      const lane = parent.kind === 'root' ? 'middle' : parent.lane;
+      const lane = parent.lane;
       const depth = parent.depth + 1;
       const order = getNextOrder(state.nodes, parent.id, lane, depth);
       const node = makeNode(kind, parent, lane, depth, order);
@@ -326,7 +364,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       return {
         past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
         future: [],
-        nodes: [...state.nodes, node],
+        nodes: rebalance([...state.nodes, node]),
         selectedId: node.id,
         dirty: true
       };
@@ -340,7 +378,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           return state;
         }
         const node = makeNode('group', root, 'middle', 1, getNextOrder(state.nodes, root.id, 'middle', 1));
-        return { past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY), future: [], nodes: [...state.nodes, node], selectedId: node.id, dirty: true };
+        return { past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY), future: [], nodes: rebalance([...state.nodes, node]), selectedId: node.id, dirty: true };
       }
 
       const parent = state.nodes.find((node) => node.id === selected.parentId);
@@ -350,7 +388,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       return {
         past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
         future: [],
-        nodes: [...state.nodes, node],
+        nodes: rebalance([...state.nodes, node]),
         selectedId: node.id,
         dirty: true
       };
@@ -366,7 +404,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       return {
         past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
         future: [],
-        nodes: state.nodes.filter((node) => !deleteIds.has(node.id)),
+        nodes: rebalance(state.nodes.filter((node) => !deleteIds.has(node.id))),
         selectedId: selected.parentId || 'root',
         dirty: true,
         deletedCaseIds: appendUnique(state.deletedCaseIds, getDeletedCaseIds(state.nodes, deleteIds))
@@ -393,7 +431,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       return {
         past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
         future: [],
-        nodes: state.nodes.map((node) => {
+        nodes: rebalance(state.nodes.map((node) => {
           if (selectedIds.has(node.id)) {
             return {
               ...node,
@@ -409,12 +447,38 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
             };
           }
           return node;
-        }),
+        })),
         dirty: true
       };
     }),
   setZoom: (zoom) => set({ zoom: Math.min(1.4, Math.max(0.6, Math.round(zoom * 10) / 10)) }),
   fitZoom: () => set({ zoom: 0.8 }),
+  autoBalanceMap: () =>
+    set((state) => ({
+      past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
+      future: [],
+      nodes: rebalance(state.nodes),
+      dirty: true,
+      layoutVersion: state.layoutVersion + 1
+    })),
+  clearCanvas: () =>
+    set((state) => {
+      const root = state.nodes.find((node) => node.kind === 'root');
+      if (!root || state.nodes.length <= 1) {
+        return state;
+      }
+
+      const deleteIds = new Set(state.nodes.filter((node) => node.id !== root.id).map((node) => node.id));
+      return {
+        past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
+        future: [],
+        nodes: rebalance([{ ...root, collapsed: false }]),
+        selectedId: root.id,
+        dirty: true,
+        deletedCaseIds: appendUnique(state.deletedCaseIds, getDeletedCaseIds(state.nodes, deleteIds)),
+        layoutVersion: state.layoutVersion + 1
+      };
+    }),
   clearExecutionRecords: () =>
     set((state) => ({
       past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
@@ -483,12 +547,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           version: 1,
           lane,
           depth: caseDepth + 1,
-          order
+          order: 0
         };
         const stepNode: MindNode = {
           id: createNodeId('step'),
-          parentId: caseNode.id,
-          title: row[2] || '补充执行步骤',
+          parentId: conditionNode.id,
+          title: formatStepList([row[2] || '补充执行步骤']),
           kind: 'step',
           tags: ['执行步骤', 'AI'],
           ai: true,
@@ -496,7 +560,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           version: 1,
           lane,
           depth: caseDepth + 2,
-          order
+          order: 0
         };
         const expectedNode: MindNode = {
           id: createNodeId('expected'),
@@ -509,7 +573,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           version: 1,
           lane,
           depth: caseDepth + 3,
-          order
+          order: 0
         };
 
         return [caseNode, conditionNode, stepNode, expectedNode];
@@ -518,12 +582,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       return {
         past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
         future: [],
-        nodes: [...state.nodes, ...createdNodes],
+        nodes: rebalance([...state.nodes, ...createdNodes]),
         selectedId: createdNodes[0]?.id || state.selectedId,
         dirty: true
       };
     }),
-  setNodes: (nodes) => set({ nodes: cloneNodes(nodes), past: [], future: [], dirty: false, caseDirtyIds: [], statusDirtyIds: [], deletedCaseIds: [] }),
+  setNodes: (nodes) => set({ nodes: rebalance(cloneNodes(nodes)), past: [], future: [], dirty: false, caseDirtyIds: [], statusDirtyIds: [], deletedCaseIds: [] }),
   setServerStats: (stats) => set({ serverStats: stats }),
   setPageStatus: (status, error) => set({ pageStatus: status, pageError: error ?? null }),
   markClean: () => set({ dirty: false }),
