@@ -23,6 +23,15 @@ export type CreateGenerateTaskRequest = {
   prdDocumentId?: number;
   contextCaseIds?: number[];
   selectedNodeId?: string;
+  attachments?: GenerationAttachmentRequest[];
+};
+
+export type GenerationAttachmentRequest = {
+  kind: 'document' | 'image';
+  fileName: string;
+  contentType: string;
+  size: number;
+  content: string;
 };
 
 export type ConfirmGenerateTaskRequest = {
@@ -142,6 +151,8 @@ export type MindmapNodeDto = {
   lane: string;
   depth: number;
   order: number;
+  fontFamily?: string;
+  fontSize?: number;
   layout?: { x?: number; y?: number; width?: number; height?: number };
 };
 

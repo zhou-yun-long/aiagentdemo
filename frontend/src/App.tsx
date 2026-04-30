@@ -26,7 +26,9 @@ function buildCaseExport(nodes: MindNode[]) {
       const descendants = nodes.filter((node) => descendantIds.has(node.id));
       const condition = nodes.find((node) => node.parentId === caseNode.id && node.kind === 'condition');
       const step = nodes.find((node) => node.parentId === caseNode.id && node.kind === 'step');
-      const expected = step ? nodes.find((node) => node.parentId === step.id && node.kind === 'expected') : undefined;
+      const expected =
+        (step ? nodes.find((node) => node.parentId === step.id && node.kind === 'expected') : undefined) ||
+        descendants.find((node) => node.kind === 'expected');
 
       return {
         id: caseNode.caseId || caseNode.id,
@@ -77,12 +79,13 @@ export default function App() {
   const moveSelectedNode = useWorkspaceStore((state) => state.moveSelectedNode);
   const setZoom = useWorkspaceStore((state) => state.setZoom);
   const fitZoom = useWorkspaceStore((state) => state.fitZoom);
-  const clearExecutionRecords = useWorkspaceStore((state) => state.clearExecutionRecords);
-  const snapshotCurrentResult = useWorkspaceStore((state) => state.snapshotCurrentResult);
+  const autoBalanceMap = useWorkspaceStore((state) => state.autoBalanceMap);
+  const clearCanvas = useWorkspaceStore((state) => state.clearCanvas);
   const dirty = useWorkspaceStore((state) => state.dirty);
   const currentProjectId = useWorkspaceStore((state) => state.currentProjectId);
   const appendAiRows = useWorkspaceStore((state) => state.appendAiRows);
   const setNodes = useWorkspaceStore((state) => state.setNodes);
+  const layoutVersion = useWorkspaceStore((state) => state.layoutVersion);
   const canUndo = useWorkspaceStore((state) => state.past.length > 0);
   const canRedo = useWorkspaceStore((state) => state.future.length > 0);
   const undo = useWorkspaceStore((state) => state.undo);
@@ -124,6 +127,17 @@ export default function App() {
     closeSnapshot();
   };
 
+  const handleClearCanvas = () => {
+    if (readOnly || nodes.length <= 1) {
+      return;
+    }
+
+    const confirmed = window.confirm('确认清空画布？将删除中心主题之外的所有节点。');
+    if (confirmed) {
+      clearCanvas();
+    }
+  };
+
   return (
     <div className={`app ${theme}`}>
       {readOnly && (
@@ -158,6 +172,7 @@ export default function App() {
         onDelete={deleteSelectedNode}
         onMoveUp={() => moveSelectedNode('up')}
         onMoveDown={() => moveSelectedNode('down')}
+        onAutoBalanceMap={autoBalanceMap}
         onExportCases={handleExportCases}
         onToggleShare={() => setShareOpen((v) => !v)}
         onToggleIntegration={toggleIntegration}
@@ -166,9 +181,10 @@ export default function App() {
         saveResult={saveResult}
         onSave={save}
         selectedId={selectedId}
+        selectedFontFamily={selectedNode?.fontFamily}
+        selectedFontSize={selectedNode?.fontSize}
         onUpdate={updateNode}
-        onClearExecution={clearExecutionRecords}
-        onSnapshot={snapshotCurrentResult}
+        onClearCanvas={handleClearCanvas}
         onFit={fitZoom}
         zoom={zoom}
         onZoomIn={() => setZoom(zoom + 0.1)}
@@ -195,16 +211,12 @@ export default function App() {
                 nodes={nodes}
                 selectedId={selectedId}
                 zoom={zoom}
-                outlineOpen={outlineOpen}
-                readOnly={readOnly}
+                layoutVersion={layoutVersion}
                 onSelect={selectNode}
                 onToggleCollapse={toggleCollapse}
                 onZoomIn={() => setZoom(zoom + 0.1)}
                 onZoomOut={() => setZoom(zoom - 0.1)}
                 onFit={fitZoom}
-                onToggleOutline={toggleOutline}
-                onClearExecution={clearExecutionRecords}
-                onSnapshot={snapshotCurrentResult}
                 setZoom={setZoom}
               />
               <SelectionBar
@@ -212,8 +224,6 @@ export default function App() {
                 lastSnapshotAt={lastSnapshotAt}
                 readOnly={readOnly}
                 onUpdate={updateNode}
-                onAddChild={addChildNode}
-                onDelete={deleteSelectedNode}
               />
             </>
           )}

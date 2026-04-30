@@ -32,6 +32,8 @@ export type MindNode = {
   order: number;
   linkUrl?: string;
   imageUrl?: string;
+  fontFamily?: string;
+  fontSize?: number;
   layout?: {
     x?: number;
     y?: number;

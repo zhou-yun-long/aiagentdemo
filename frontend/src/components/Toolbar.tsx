@@ -5,13 +5,12 @@ import {
   BookOpen,
   Bot,
   Camera,
-  ChevronDown,
   Download,
-  Eraser,
   FileText,
   FileSpreadsheet,
   FileType,
   Fullscreen,
+  GitBranch,
   Image,
   Link,
   List,
@@ -27,8 +26,8 @@ import {
   Share2,
   Sun,
   Trash2,
+  Type,
   Wrench,
-  ZoomIn
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { MindNode, ThemeMode, WorkspaceStats } from '../shared/types/workspace';
@@ -65,6 +64,7 @@ type ToolbarProps = {
   onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onAutoBalanceMap: () => void;
   onExportCases: (format: ExportFormat) => void;
   onToggleShare: () => void;
   onToggleIntegration: () => void;
@@ -75,9 +75,10 @@ type ToolbarProps = {
   saveResult: SaveResult | null;
   onSave: () => void;
   selectedId?: string;
+  selectedFontFamily?: string;
+  selectedFontSize?: number;
   onUpdate: (id: string, patch: Partial<MindNode>) => void;
-  onClearExecution: () => void;
-  onSnapshot: () => void;
+  onClearCanvas: () => void;
   onFit: () => void;
   zoom: number;
   onZoomIn: () => void;
@@ -111,6 +112,7 @@ export function Toolbar({
   onDelete,
   onMoveUp,
   onMoveDown,
+  onAutoBalanceMap,
   onExportCases,
   onToggleShare,
   onToggleIntegration,
@@ -121,9 +123,10 @@ export function Toolbar({
   saveResult,
   onSave,
   selectedId,
+  selectedFontFamily,
+  selectedFontSize,
   onUpdate,
-  onClearExecution,
-  onSnapshot,
+  onClearCanvas,
   onFit,
   zoom,
   onZoomIn,
@@ -135,13 +138,13 @@ export function Toolbar({
   const exportRef = useRef<HTMLDivElement>(null);
   const [toolOpen, setToolOpen] = useState(false);
   const toolRef = useRef<HTMLDivElement>(null);
-  const [fontOpen, setFontOpen] = useState(false);
-  const fontRef = useRef<HTMLDivElement>(null);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const appearanceRef = useRef<HTMLDivElement>(null);
   const [viewOpen, setViewOpen] = useState(false);
   const viewRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [nodeFontOpen, setNodeFontOpen] = useState(false);
+  const nodeFontRef = useRef<HTMLDivElement>(null);
   const [currentFont, setCurrentFont] = useState('Inter');
   const [fontSize, setFontSize] = useState(14);
   const [tagList, setTagList] = useState(['前置条件', '执行步骤', '预期结果', 'iOS', 'Android', 'Web', 'AI', '缓存', '数据', '变更']);
@@ -160,7 +163,6 @@ export function Toolbar({
   const handleFontChange = (fontName: string, fontValue: string) => {
     document.documentElement.style.setProperty('font-family', fontValue);
     setCurrentFont(fontName);
-    setFontOpen(false);
   };
 
   const handleFontSize = (size: number) => {
@@ -238,17 +240,6 @@ export function Toolbar({
   }, [toolOpen]);
 
   useEffect(() => {
-    if (!fontOpen) return;
-    const handleClick = (e: MouseEvent) => {
-      if (fontRef.current && !fontRef.current.contains(e.target as Node)) {
-        setFontOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [fontOpen]);
-
-  useEffect(() => {
     if (!appearanceOpen) return;
     const handleClick = (e: MouseEvent) => {
       if (appearanceRef.current && !appearanceRef.current.contains(e.target as Node)) {
@@ -269,6 +260,17 @@ export function Toolbar({
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [viewOpen]);
+
+  useEffect(() => {
+    if (!nodeFontOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (nodeFontRef.current && !nodeFontRef.current.contains(e.target as Node)) {
+        setNodeFontOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [nodeFontOpen]);
 
   return (
     <header className="toolbar">
@@ -360,13 +362,6 @@ export function Toolbar({
                     }}>重置 100%</button>
                   </div>
                 </div>
-                <div className="appearance-section">
-                  <label>面板</label>
-                  <div className="appearance-row">
-                    <button className={`appearance-btn${outlineOpen ? ' active' : ''}`} onClick={onToggleOutline}>大纲</button>
-                    <button className={`appearance-btn${assistantOpen ? ' active' : ''}`} onClick={onToggleAssistant}>AI助手</button>
-                  </div>
-                </div>
               </div>
             )}
           </div>
@@ -442,26 +437,6 @@ export function Toolbar({
             <Share2 size={15} />
             用例分享
           </button>
-          <div className="font-dropdown" ref={fontRef}>
-            <button className="ghost" onClick={() => setFontOpen((v) => !v)}>
-              {currentFont}
-              <ChevronDown size={14} />
-            </button>
-            {fontOpen && (
-              <div className="font-menu">
-                {fontOptions.map((font) => (
-                  <button
-                    key={font.label}
-                    className={currentFont === font.label ? 'active' : ''}
-                    style={{ fontFamily: font.value }}
-                    onClick={() => handleFontChange(font.label, font.value)}
-                  >
-                    {font.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
           <button className="icon" onClick={onToggleTheme} aria-label="切换主题">
             {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
@@ -496,6 +471,10 @@ export function Toolbar({
           <ArrowDown size={15} />
           下移
         </button>
+        <button className="tool" onClick={onAutoBalanceMap}>
+          <GitBranch size={15} />
+          自动平衡布局
+        </button>
         <button className="tool danger" onClick={onDelete}>
           <Trash2 size={15} />
           删除
@@ -508,6 +487,59 @@ export function Toolbar({
           <Image size={15} />
           图片
         </button>
+        {selectedId && (
+          <div className="node-font-controls">
+            <div className="tool-dropdown" ref={nodeFontRef}>
+              <button className="tool" onClick={() => setNodeFontOpen((v) => !v)} title="节点字体">
+                <Type size={15} />
+                {selectedFontFamily ? fontOptions.find(f => selectedFontFamily.includes(f.label))?.label || '自定义' : '字体'}
+              </button>
+              {nodeFontOpen && (
+                <div className="tool-menu node-font-menu">
+                  <button
+                    className={!selectedFontFamily ? 'active' : ''}
+                    onClick={() => { if (selectedId) onUpdate(selectedId, { fontFamily: undefined }); setNodeFontOpen(false); }}
+                  >
+                    默认
+                  </button>
+                  {fontOptions.map((font) => (
+                    <button
+                      key={font.label}
+                      className={selectedFontFamily === font.value ? 'active' : ''}
+                      style={{ fontFamily: font.value }}
+                      onClick={() => { if (selectedId) onUpdate(selectedId, { fontFamily: font.value }); setNodeFontOpen(false); }}
+                    >
+                      {font.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              className="tool compact"
+              onClick={() => {
+                if (!selectedId) return;
+                const cur = selectedFontSize ?? 13;
+                onUpdate(selectedId, { fontSize: Math.max(10, cur - 1) });
+              }}
+              title="减小字号"
+            >
+              A-
+            </button>
+            <span className="tool-label">{selectedFontSize ?? 13}px</span>
+            <button
+              className="tool compact"
+              onClick={() => {
+                if (!selectedId) return;
+                const cur = selectedFontSize ?? 13;
+                onUpdate(selectedId, { fontSize: Math.min(24, cur + 1) });
+              }}
+              title="增大字号"
+            >
+              A+
+            </button>
+          </div>
+        )}
         <button className="tool" disabled={!dirty || saving} onClick={onSave}>
           {saving ? <Loader2 size={15} className="spinner-icon" /> : <Save size={15} />}
           保存{dirty ? ' *' : ''}
@@ -522,17 +554,9 @@ export function Toolbar({
           </button>
           {toolOpen && (
             <div className="tool-menu">
-              <button onClick={() => { onClearExecution(); setToolOpen(false); }}>
-                <Eraser size={14} />
-                清除执行记录
-              </button>
-              <button onClick={() => { onSnapshot(); setToolOpen(false); }}>
-                <Camera size={14} />
-                快照当前结果
-              </button>
-              <button onClick={() => { onFit(); setToolOpen(false); }}>
-                <ZoomIn size={14} />
-                适应画布
+              <button onClick={() => { onClearCanvas(); setToolOpen(false); }}>
+                <Trash2 size={14} />
+                清空画布
               </button>
             </div>
           )}

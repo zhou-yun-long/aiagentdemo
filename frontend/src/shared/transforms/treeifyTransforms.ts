@@ -14,6 +14,17 @@ export function statsFromServer(stats: { total: number; measured: number; passed
 
 const lanes: MindNode['lane'][] = ['upper', 'middle', 'lower'];
 
+export function formatStepList(steps: string[] = []) {
+  const normalized = steps
+    .flatMap((step) => splitSteps(step))
+    .map((step) => step.replace(/^\d+[.)、]\s*/, '').trim())
+    .filter(Boolean);
+
+  return normalized.length
+    ? normalized.map((step, index) => `${index + 1}.${step}`).join('\n')
+    : '补充执行步骤';
+}
+
 export function normalizePriority(value: unknown): Priority {
   return value === 'P0' || value === 'P1' || value === 'P2' || value === 'P3' ? value : 'P1';
 }
@@ -122,21 +133,21 @@ export function testCaseToMindNodes(testCase: TestCaseDto, index: number): MindN
       version: testCase.version,
       lane,
       depth: 3,
-      order
+      order: 0
     },
     {
       id: stepId,
-      parentId: caseId,
+      parentId: conditionId,
       caseId: String(testCase.id),
       projectId: String(testCase.projectId),
-      title: testCase.steps.join('；'),
+      title: formatStepList(testCase.steps),
       kind: 'step',
       tags: ['执行步骤'],
       source: testCase.source === 'ai' ? 'ai' : 'manual',
       version: testCase.version,
       lane,
       depth: 4,
-      order
+      order: 0
     },
     {
       id: `${caseId}-expected`,
@@ -150,7 +161,7 @@ export function testCaseToMindNodes(testCase: TestCaseDto, index: number): MindN
       version: testCase.version,
       lane,
       depth: 5,
-      order
+      order: 0
     }
   ];
 }
@@ -180,6 +191,8 @@ export function mindNodeToDto(node: MindNode): MindmapNodeDto {
     lane: node.lane,
     depth: node.depth,
     order: node.order,
+    fontFamily: node.fontFamily,
+    fontSize: node.fontSize,
     layout: node.layout ? { ...node.layout } : undefined
   };
 }
@@ -201,6 +214,8 @@ export function mindNodeFromDto(dto: MindmapNodeDto): MindNode {
     lane: dto.lane as MindNode['lane'],
     depth: dto.depth,
     order: dto.order,
+    fontFamily: dto.fontFamily,
+    fontSize: dto.fontSize,
     layout: dto.layout ? { ...dto.layout } : undefined
   };
 }
@@ -208,7 +223,7 @@ export function mindNodeFromDto(dto: MindmapNodeDto): MindNode {
 function splitSteps(value: string | undefined) {
   return (value || '')
     .split(/[；;\n]/)
-    .map((step) => step.trim())
+    .map((step) => step.trim().replace(/^\d+[.)、]\s*/, ''))
     .filter(Boolean);
 }
 
@@ -218,18 +233,24 @@ export function buildTestCaseRequest(nodes: MindNode[], caseId: string): TestCas
     return null;
   }
 
-  const conditionNode = nodes.find((node) => node.parentId === caseNode.id && node.kind === 'condition');
+  const conditionNode = nodes.find((node) => node.parentId === caseNode.id && node.kind === 'condition')
+    || nodes.find((node) => node.caseId === caseId && node.kind === 'condition');
   const directStepNodes = nodes
     .filter((node) => node.parentId === caseNode.id && node.kind === 'step')
     .sort((a, b) => a.order - b.order);
+  const chainedStepNodes = conditionNode
+    ? nodes.filter((node) => node.parentId === conditionNode.id && node.kind === 'step').sort((a, b) => a.order - b.order)
+    : [];
   const nestedStepNodes = nodes
     .filter((node) => node.caseId === caseId && node.kind === 'step')
     .sort((a, b) => a.depth - b.depth || a.order - b.order);
-  const stepNodes = directStepNodes.length ? directStepNodes : nestedStepNodes;
+  const stepNodes = chainedStepNodes.length ? chainedStepNodes : directStepNodes.length ? directStepNodes : nestedStepNodes;
   const firstStep = stepNodes[0];
-  const expectedNode = firstStep
+  const directExpectedNode = nodes.find((node) => node.parentId === caseNode.id && node.kind === 'expected');
+  const nestedExpectedNode = firstStep
     ? nodes.find((node) => node.parentId === firstStep.id && node.kind === 'expected')
-    : nodes.find((node) => node.caseId === caseId && node.kind === 'expected');
+    : undefined;
+  const expectedNode = directExpectedNode || nestedExpectedNode || nodes.find((node) => node.caseId === caseId && node.kind === 'expected');
 
   return {
     parentId: null,

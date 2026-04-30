@@ -1,56 +1,31 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MindNode } from '../shared/types/workspace';
+import { getMindMapBounds, getMindNodeBox, getMindNodePosition, getMindNodeSize } from '../utils/mindMapLayout';
 import { NodeCard } from './NodeCard';
 
 type MindMapCanvasProps = {
   nodes: MindNode[];
   selectedId: string;
   zoom: number;
-  outlineOpen: boolean;
-  readOnly?: boolean;
+  layoutVersion: number;
   onSelect: (id: string) => void;
   onToggleCollapse: (id: string) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFit: () => void;
-  onToggleOutline: () => void;
-  onClearExecution: () => void;
-  onSnapshot: () => void;
   setZoom: (zoom: number) => void;
 };
-
-const canvasSize = {
-  width: 1320,
-  height: 620
-};
-
-const laneTop = {
-  upper: 120,
-  middle: 260,
-  lower: 410
-};
-
-function getPosition(node: MindNode) {
-  return {
-    x: 140 + node.depth * 210,
-    y: laneTop[node.lane] + node.order * 72
-  };
-}
 
 export function MindMapCanvas({
   nodes,
   selectedId,
   zoom,
-  outlineOpen,
-  readOnly,
+  layoutVersion,
   onSelect,
   onToggleCollapse,
   onZoomIn,
   onZoomOut,
   onFit,
-  onToggleOutline,
-  onClearExecution,
-  onSnapshot,
   setZoom
 }: MindMapCanvasProps) {
   const shellRef = useRef<HTMLElement>(null);
@@ -59,8 +34,27 @@ export function MindMapCanvas({
   const [spaceDown, setSpaceDown] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [smoothFollow, setSmoothFollow] = useState(false);
+  const [showHint, setShowHint] = useState(() => !sessionStorage.getItem('canvas-hint-dismissed'));
   const panStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const smoothTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Auto-dismiss hint after 5 seconds
+  useEffect(() => {
+    if (!showHint) return;
+    hintTimerRef.current = setTimeout(() => {
+      setShowHint(false);
+      sessionStorage.setItem('canvas-hint-dismissed', '1');
+    }, 5000);
+    return () => clearTimeout(hintTimerRef.current);
+  }, [showHint]);
+
+  const dismissHint = useCallback(() => {
+    if (!showHint) return;
+    clearTimeout(hintTimerRef.current);
+    setShowHint(false);
+    sessionStorage.setItem('canvas-hint-dismissed', '1');
+  }, [showHint]);
 
   // Space key held → grab cursor
   useEffect(() => {
@@ -86,13 +80,14 @@ export function MindMapCanvas({
   // Drag-to-pan (space+drag or middle-mouse drag)
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      dismissHint();
       if (e.button === 1 || (e.button === 0 && spaceDown)) {
         e.preventDefault();
         setIsPanning(true);
         panStartRef.current = { x: e.clientX, y: e.clientY, panX, panY };
       }
     },
-    [spaceDown, panX, panY]
+    [spaceDown, panX, panY, dismissHint]
   );
 
   useEffect(() => {
@@ -122,6 +117,7 @@ export function MindMapCanvas({
     if (!shell) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      dismissHint();
       if (e.ctrlKey || e.metaKey) {
         // Zoom toward cursor
         const rect = shell.getBoundingClientRect();
@@ -142,7 +138,7 @@ export function MindMapCanvas({
     };
     shell.addEventListener('wheel', onWheel, { passive: false });
     return () => shell.removeEventListener('wheel', onWheel);
-  }, [zoom, panX, panY, setZoom]);
+  }, [zoom, panX, panY, setZoom, dismissHint]);
 
   // Auto-scroll to selected node
   useEffect(() => {
@@ -152,9 +148,8 @@ export function MindMapCanvas({
 
     const shell = shellRef.current;
     const { width: shellW, height: shellH } = shell.getBoundingClientRect();
-    const pos = getPosition(node);
-    const nodeW = node.kind === 'root' ? 192 : 170;
-    const nodeH = 36;
+    const pos = getMindNodePosition(node);
+    const { width: nodeW, height: nodeH } = getMindNodeSize(node);
     const centerX = (pos.x + nodeW / 2) * zoom + panX;
     const centerY = (pos.y + nodeH / 2) * zoom + panY;
     const margin = 120;
@@ -174,6 +169,19 @@ export function MindMapCanvas({
       smoothTimerRef.current = setTimeout(() => setSmoothFollow(false), 350);
     }
   }, [selectedId, nodes, zoom]);
+
+  // Reset pan to center on root when layout changes (e.g. auto-balance)
+  useEffect(() => {
+    if (layoutVersion === 0 || !shellRef.current) return;
+    const root = nodes.find((n) => n.kind === 'root');
+    if (!root) return;
+    const shell = shellRef.current;
+    const { width: shellW, height: shellH } = shell.getBoundingClientRect();
+    const pos = getMindNodePosition(root);
+    const { width: rootW, height: rootH } = getMindNodeSize(root);
+    setPanX(shellW / 2 - (pos.x + rootW / 2) * zoom);
+    setPanY(shellH / 2 - (pos.y + rootH / 2) * zoom);
+  }, [layoutVersion]);
 
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
 
@@ -199,6 +207,7 @@ export function MindMapCanvas({
   }
 
   const visibleNodes = nodes.filter((node) => !collapsedAncestors.has(node.id));
+  const canvasSize = getMindMapBounds(visibleNodes);
 
   const shellClass = [
     'canvas-shell',
@@ -216,8 +225,20 @@ export function MindMapCanvas({
       onMouseDown={handleMouseDown}
     >
       <div className="canvas-viewport" style={{ width: canvasSize.width * zoom, height: canvasSize.height * zoom }}>
-        <div className="canvas" style={{ transform: `translate(${panX}px, ${panY}px) scale(${zoom})` }}>
-          <svg className="connectors" viewBox="0 0 1320 620" preserveAspectRatio="none" aria-hidden="true">
+        <div
+          className="canvas"
+          style={{
+            width: canvasSize.width,
+            height: canvasSize.height,
+            transform: `translate(${panX}px, ${panY}px) scale(${zoom})`
+          }}
+        >
+          <svg
+            className="connectors"
+            viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
             {visibleNodes
               .filter((node) => node.parentId)
               .map((node) => {
@@ -225,13 +246,16 @@ export function MindMapCanvas({
                 if (!parent) {
                   return null;
                 }
-                const from = getPosition(parent);
-                const to = getPosition(node);
-                const startX = from.x + (parent.kind === 'root' ? 96 : 170);
-                const startY = from.y + 18;
-                const endX = to.x - 18;
-                const endY = to.y + 18;
-                const midX = startX + Math.max(60, (endX - startX) / 2);
+                const from = getMindNodeBox(parent);
+                const to = getMindNodeBox(node);
+                const childIsLeft = to.x + to.width / 2 < from.x + from.width / 2;
+                const startX = childIsLeft ? from.x : from.x + from.width;
+                const startY = from.y + from.height / 2;
+                const endX = childIsLeft ? to.x + to.width + 18 : to.x - 18;
+                const endY = to.y + to.height / 2;
+                const midX = childIsLeft
+                  ? startX - Math.max(60, (startX - endX) / 2)
+                  : startX + Math.max(60, (endX - startX) / 2);
                 return (
                   <path
                     d={`M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`}
@@ -241,7 +265,7 @@ export function MindMapCanvas({
               })}
           </svg>
           {visibleNodes.map((node) => {
-            const position = getPosition(node);
+            const position = getMindNodePosition(node);
             const hasChildren = childMap.has(node.id);
             return (
               <div className="node-position" key={node.id} style={{ left: position.x, top: position.y }}>
@@ -257,15 +281,15 @@ export function MindMapCanvas({
         <button onClick={onZoomOut}>-</button>
         <button onClick={onFit}>⌖</button>
       </div>
-      <div className="canvas-actions">
-        <button onClick={onToggleOutline}>{outlineOpen ? '隐藏大纲' : '显示大纲'}</button>
-        {!readOnly && (
-          <>
-            <button onClick={onClearExecution}>清除执行记录</button>
-            <button onClick={onSnapshot}>快照当前结果</button>
-          </>
-        )}
-      </div>
+      {showHint && (
+        <div className="canvas-hint" onClick={dismissHint}>
+          <span>滚轮平移</span>
+          <span className="hint-sep">·</span>
+          <span>Ctrl+滚轮缩放</span>
+          <span className="hint-sep">·</span>
+          <span>空格+拖拽移动</span>
+        </div>
+      )}
     </main>
   );
 }

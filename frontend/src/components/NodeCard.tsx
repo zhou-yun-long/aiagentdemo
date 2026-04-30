@@ -21,6 +21,7 @@ export function NodeCard({ node, selected, hasChildren, onSelect, onToggleCollap
       <button
         className={`node-card ${node.kind} ${selected ? 'selected' : ''}`}
         data-node-id={node.id}
+        data-tooltip={node.title}
         onClick={() => onSelect(node.id)}
       >
         {hasChildren && (
@@ -34,7 +35,7 @@ export function NodeCard({ node, selected, hasChildren, onSelect, onToggleCollap
         )}
         {node.status && <span className={`status ${node.status}`}>{statusIcon[node.status]}</span>}
         {node.priority && <span className={`priority ${node.priority.toLowerCase()}`}>{node.priority}</span>}
-        <span className="node-title">{node.title}</span>
+        <span className="node-title" style={{ fontFamily: node.fontFamily, fontSize: node.fontSize }}>{node.title}</span>
         {node.executionStatus && <span className={`execution-chip ${node.executionStatus}`}>{executionStatusLabels[node.executionStatus]}</span>}
         {node.tags?.map((tag) => (
           <span className={`tag mini ${tag === 'AI' ? 'ai' : ''}`} key={tag}>

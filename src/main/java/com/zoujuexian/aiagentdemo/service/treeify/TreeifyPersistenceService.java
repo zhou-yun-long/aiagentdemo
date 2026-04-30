@@ -6,6 +6,7 @@ import com.zoujuexian.aiagentdemo.api.common.BusinessException;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.BatchConfirmCasesRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CaseStatsDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CreateGenerateTaskRequest;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerationAttachmentRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateTaskDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GeneratedCaseDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.MindmapNodeDto;
@@ -43,6 +44,8 @@ public class TreeifyPersistenceService {
     private static final Set<String> EXECUTION_STATUSES = Set.of(
             "not_run", "running", "passed", "failed", "blocked", "skipped"
     );
+    private static final int MAX_ATTACHMENT_TEXT_CHARS = 60000;
+    private static final int MAX_IMAGE_DATA_URL_CHARS = 1200;
 
     private final TreeifyProjectRepository projectRepo;
     private final TreeifyTestCaseRepository caseRepo;
@@ -271,10 +274,20 @@ public class TreeifyPersistenceService {
     public GenerateTaskDto createGenerateTask(Long projectId, CreateGenerateTaskRequest request) {
         findProject(projectId);
         String mode = normalizeMode(request == null ? null : request.mode());
-        String input = requireText(request == null ? null : request.input(), "需求输入不能为空");
+        List<GenerationAttachmentRequest> attachments = normalizeAttachments(request == null ? null : request.attachments());
+        String input = defaultText(request == null ? null : request.input(), "").trim();
+        if (input.isBlank() && attachments.isEmpty()) {
+            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "需求输入或附件不能为空");
+        }
         List<Long> contextCaseIds = normalizeContextCaseIds(request == null ? null : request.contextCaseIds());
         String selectedNodeId = defaultText(request == null ? null : request.selectedNodeId(), "");
-        String generationInput = appendGenerationContext(projectId, input, selectedNodeId, contextCaseIds);
+        String generationInput = appendGenerationContext(
+                projectId,
+                input,
+                selectedNodeId,
+                contextCaseIds,
+                attachments
+        );
 
         String taskId = UUID.randomUUID().toString();
         LocalDateTime now = LocalDateTime.now();
@@ -310,8 +323,11 @@ public class TreeifyPersistenceService {
                 .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll));
     }
 
-    private String appendGenerationContext(Long projectId, String input, String selectedNodeId, List<Long> contextCaseIds) {
-        if (contextCaseIds.isEmpty() && selectedNodeId.isBlank()) {
+    private String appendGenerationContext(Long projectId, String input, String selectedNodeId,
+                                           List<Long> contextCaseIds,
+                                           List<GenerationAttachmentRequest> attachments) {
+        List<GenerationAttachmentRequest> safeAttachments = normalizeAttachments(attachments);
+        if (contextCaseIds.isEmpty() && selectedNodeId.isBlank() && safeAttachments.isEmpty()) {
             return input;
         }
 
@@ -340,11 +356,63 @@ public class TreeifyPersistenceService {
             }
         }
 
+        appendAttachmentContext(context, safeAttachments);
+
         if (context.length() == 0) {
             return input;
         }
         return input + "\n\n【当前工作台上下文】\n" + context
                 + "请优先围绕当前选区和关联用例补充、扩展或修正测试覆盖。";
+    }
+
+    private List<GenerationAttachmentRequest> normalizeAttachments(List<GenerationAttachmentRequest> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            return List.of();
+        }
+        return attachments.stream()
+                .filter(attachment -> attachment != null && attachment.fileName() != null && !attachment.fileName().isBlank())
+                .toList();
+    }
+
+    private void appendAttachmentContext(StringBuilder context, List<GenerationAttachmentRequest> attachments) {
+        if (attachments.isEmpty()) {
+            return;
+        }
+
+        context.append("生成附件：\n");
+        for (GenerationAttachmentRequest attachment : attachments) {
+            String kind = defaultText(attachment.kind(), "document");
+            String fileName = defaultText(attachment.fileName(), "未命名附件").trim();
+            String contentType = defaultText(attachment.contentType(), "application/octet-stream");
+            long size = attachment.size() == null ? 0 : Math.max(0, attachment.size());
+            context.append("- ").append("image".equals(kind) ? "图片" : "文档")
+                    .append("：").append(fileName)
+                    .append("，类型=").append(contentType)
+                    .append("，大小=").append(size).append(" bytes")
+                    .append('\n');
+
+            String content = defaultText(attachment.content(), "").trim();
+            if (content.isBlank()) {
+                context.append("  内容：该附件未提取到可读文本，请结合文件名和用户输入理解。\n");
+                continue;
+            }
+
+            if ("image".equals(kind)) {
+                context.append("  图片数据：").append(truncateText(content, MAX_IMAGE_DATA_URL_CHARS))
+                        .append("\n  说明：当前三阶段文字链路会保留图片附件信息；若模型不支持视觉输入，请依据文件名和用户补充说明生成用例。\n");
+            } else {
+                context.append("  文档内容：\n")
+                        .append(truncateText(content, MAX_ATTACHMENT_TEXT_CHARS))
+                        .append('\n');
+            }
+        }
+    }
+
+    private String truncateText(String value, int limit) {
+        if (value == null || value.length() <= limit) {
+            return defaultText(value, "");
+        }
+        return value.substring(0, limit) + "\n...[内容已截断]";
     }
 
     private List<Long> parseContextCaseIds(String value) {
@@ -481,6 +549,8 @@ public class TreeifyPersistenceService {
                 entity.getLane(),
                 entity.getDepth(),
                 entity.getOrderIndex(),
+                entity.getFontFamily(),
+                entity.getFontSize(),
                 entity.getLayout() == null ? Map.of() : Map.copyOf(entity.getLayout())
         );
     }
@@ -548,6 +618,8 @@ public class TreeifyPersistenceService {
         entity.setLane(defaultText(node.lane(), "middle"));
         entity.setDepth(node.depth() == null ? 0 : node.depth());
         entity.setOrderIndex(node.order() == null ? fallbackOrder : node.order());
+        entity.setFontFamily(blankToNull(node.fontFamily()));
+        entity.setFontSize(node.fontSize());
         entity.setLayout(node.layout() == null ? Map.of() : Map.copyOf(node.layout()));
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
@@ -586,6 +658,8 @@ public class TreeifyPersistenceService {
                     lane,
                     2,
                     order,
+                    null,
+                    null,
                     testCase.layout()
             ));
             nodes.add(new MindmapNodeDto(
@@ -603,15 +677,17 @@ public class TreeifyPersistenceService {
                     testCase.version(),
                     lane,
                     3,
-                    order,
+                    0,
+                    null,
+                    null,
                     Map.of()
             ));
             nodes.add(new MindmapNodeDto(
                     stepNodeId,
-                    caseNodeId,
+                    caseNodeId + "-condition",
                     String.valueOf(testCase.id()),
                     String.valueOf(testCase.projectId()),
-                    String.join("；", testCase.steps()),
+                    formatStepList(testCase.steps()),
                     "step",
                     null,
                     List.of("执行步骤"),
@@ -621,7 +697,9 @@ public class TreeifyPersistenceService {
                     testCase.version(),
                     lane,
                     4,
-                    order,
+                    0,
+                    null,
+                    null,
                     Map.of()
             ));
             nodes.add(new MindmapNodeDto(
@@ -639,11 +717,32 @@ public class TreeifyPersistenceService {
                     testCase.version(),
                     lane,
                     5,
-                    order,
+                    0,
+                    null,
+                    null,
                     Map.of()
             ));
         }
         return nodes;
+    }
+
+    private String formatStepList(List<String> steps) {
+        List<String> normalized = steps == null ? List.of() : steps.stream()
+                .filter(step -> step != null && !step.isBlank())
+                .map(step -> step.trim().replaceFirst("^\\d+[.)、]\\s*", ""))
+                .toList();
+        if (normalized.isEmpty()) {
+            return "补充执行步骤";
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < normalized.size(); i++) {
+            if (i > 0) {
+                builder.append('\n');
+            }
+            builder.append(i + 1).append('.').append(normalized.get(i));
+        }
+        return builder.toString();
     }
 
     // ──── Generation Event persistence ────

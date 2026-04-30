@@ -62,6 +62,11 @@ public class TreeifyMindmapNode {
     @Column(name = "node_order")
     private int orderIndex;
 
+    @Column(length = 500)
+    private String fontFamily;
+
+    private Integer fontSize;
+
     @Convert(converter = JsonMapConverter.class)
     @Column(length = 2000)
     private Map<String, Object> layout = new LinkedHashMap<>();
@@ -118,6 +123,12 @@ public class TreeifyMindmapNode {
 
     public int getOrderIndex() { return orderIndex; }
     public void setOrderIndex(int orderIndex) { this.orderIndex = orderIndex; }
+
+    public String getFontFamily() { return fontFamily; }
+    public void setFontFamily(String fontFamily) { this.fontFamily = fontFamily; }
+
+    public Integer getFontSize() { return fontSize; }
+    public void setFontSize(Integer fontSize) { this.fontSize = fontSize; }
 
     public Map<String, Object> getLayout() { return layout; }
     public void setLayout(Map<String, Object> layout) { this.layout = layout; }

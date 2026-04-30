@@ -19,5 +19,7 @@ public record MindmapNodeDto(
         String lane,
         Integer depth,
         Integer order,
+        String fontFamily,
+        Integer fontSize,
         Map<String, Object> layout
 ) {}

@@ -24,6 +24,8 @@ function mindmapDtoToMindNode(dto: MindmapNodeDto): MindNode {
     lane: dto.lane as MindNode['lane'],
     depth: dto.depth,
     order: dto.order,
+    fontFamily: dto.fontFamily,
+    fontSize: dto.fontSize,
     layout: dto.layout
   };
 }
