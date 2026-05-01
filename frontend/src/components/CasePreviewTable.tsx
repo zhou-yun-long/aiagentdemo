@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Trash2 } from 'lucide-react';
 import type { GeneratedCaseDraft } from '../types/generation';
 
@@ -8,6 +9,26 @@ type CasePreviewTableProps = {
   onRemove: (id: string) => void;
   onConfirm: () => void | Promise<void>;
 };
+
+function AutoResizeTextarea({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.style.height = 'auto';
+      ref.current.style.height = `${ref.current.scrollHeight}px`;
+    }
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={label}
+    />
+  );
+}
 
 export function CasePreviewTable({ cases, confirming, onUpdate, onRemove, onConfirm }: CasePreviewTableProps) {
   if (!cases.length) {
@@ -41,24 +62,25 @@ export function CasePreviewTable({ cases, confirming, onUpdate, onRemove, onConf
                 <Trash2 size={14} />
               </button>
             </div>
-            <textarea
+            <AutoResizeTextarea
               value={item.precondition}
-              onChange={(event) => onUpdate(item.id, { precondition: event.target.value })}
-              aria-label="前置条件"
+              onChange={(v) => onUpdate(item.id, { precondition: v })}
+              label="前置条件"
             />
-            <textarea
+            <AutoResizeTextarea
               value={item.steps.join('\n')}
-              onChange={(event) =>
+              onChange={(v) =>
                 onUpdate(item.id, {
-                  steps: event.target.value
-                    .split('\n')
-                    .map((step) => step.trim())
-                    .filter(Boolean)
+                  steps: v.split('\n').map((step) => step.trim()).filter(Boolean)
                 })
               }
-              aria-label="执行步骤"
+              label="执行步骤"
             />
-            <textarea value={item.expected} onChange={(event) => onUpdate(item.id, { expected: event.target.value })} aria-label="预期结果" />
+            <AutoResizeTextarea
+              value={item.expected}
+              onChange={(v) => onUpdate(item.id, { expected: v })}
+              label="预期结果"
+            />
           </article>
         ))}
       </div>

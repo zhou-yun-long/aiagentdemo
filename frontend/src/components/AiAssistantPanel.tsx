@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { aiRows } from '../data/mindMap';
 import type { MindNode } from '../shared/types/workspace';
@@ -12,10 +12,33 @@ type AiAssistantPanelProps = {
 };
 
 const defaultPrompt =
-  '策略红包仍有余额\n策略红包的功能交互\n策略红包展示对应 tag，新人红包、加油红包\n点击策略红包，进入提现详情页，被选中后流程提示“该红包已被抢光”\n提现完成后，回到活动主页';
+  '策略红包仍有余额\n策略红包的功能交互\n策略红包展示对应 tag，新人红包、加油红包\n点击策略红包，进入提现详情页，被选中后流程提示”该红包已被抢光”\n提现完成后，回到活动主页';
 
 export function AiAssistantPanel({ open, selectedNode, onClose, onImportRows }: AiAssistantPanelProps) {
   const [prompt, setPrompt] = useState(defaultPrompt);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const panel = (e.currentTarget as HTMLElement).parentElement!;
+    dragRef.current = { startX: e.clientX, startWidth: panel.offsetWidth };
+  }, []);
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragRef.current) return;
+      const delta = dragRef.current.startX - e.clientX;
+      const newWidth = Math.min(800, Math.max(280, dragRef.current.startWidth + delta));
+      document.documentElement.style.setProperty('--assistant-width', `${newWidth}px`);
+    };
+    const onMouseUp = () => { dragRef.current = null; };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
 
   const quoteSelectedNode = () => {
     if (!selectedNode) {
@@ -26,6 +49,7 @@ export function AiAssistantPanel({ open, selectedNode, onClose, onImportRows }: 
 
   return (
     <aside className={`assistant-panel ${open ? 'open' : ''}`}>
+      <div className="assistant-resize-handle" onMouseDown={handleResizeMouseDown} />
       <div className="assistant-header">
         <strong>AI 助手</strong>
         <button className="icon" onClick={onClose} aria-label="关闭 AI 助手">

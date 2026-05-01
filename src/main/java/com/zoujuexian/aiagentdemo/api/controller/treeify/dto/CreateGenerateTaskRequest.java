@@ -7,6 +7,7 @@ public record CreateGenerateTaskRequest(
         String input,
         Long prdDocumentId,
         List<Long> contextCaseIds,
-        String selectedNodeId
+        String selectedNodeId,
+        List<GenerationAttachmentRequest> attachments
 ) {
 }

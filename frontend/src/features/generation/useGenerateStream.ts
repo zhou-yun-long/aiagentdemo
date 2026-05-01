@@ -8,7 +8,7 @@ import {
   getGenerateStreamUrl,
   getTreeifyApiMode
 } from '../../shared/api/treeify';
-import type { GenerateSseEventDto } from '../../shared/types/treeify';
+import type { GenerateSseEventDto, GenerationAttachmentRequest } from '../../shared/types/treeify';
 import {
   generatedCaseDtosToDrafts,
   getStageNeedConfirm,
@@ -243,7 +243,7 @@ export function useGenerateStream() {
   );
 
   const startRealGeneration = useCallback(
-    async (input: string, mode: GenerationMode) => {
+    async (input: string, mode: GenerationMode, attachments: GenerationAttachmentRequest[] = []) => {
       clearTimers();
       closeEventSource();
 
@@ -261,7 +261,8 @@ export function useGenerateStream() {
         mode,
         input,
         selectedNodeId: selectedId,
-        contextCaseIds
+        contextCaseIds,
+        attachments
       });
 
       useGenerationStore.getState().beginTask(task.taskId, input, mode, 'real');
@@ -272,7 +273,7 @@ export function useGenerateStream() {
   );
 
   const startGeneration = useCallback(
-    async (input: string, mode: GenerationMode) => {
+    async (input: string, mode: GenerationMode, attachments: GenerationAttachmentRequest[] = []) => {
       const apiMode = getTreeifyApiMode();
 
       if (apiMode === 'mock') {
@@ -281,7 +282,7 @@ export function useGenerateStream() {
       }
 
       try {
-        await startRealGeneration(input, mode);
+        await startRealGeneration(input, mode, attachments);
       } catch (error) {
         if (apiMode === 'real') {
           const message = error instanceof Error ? error.message : '创建生成任务失败';

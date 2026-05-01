@@ -1,12 +1,18 @@
 import { executionStatusLabels, priorityOptions, type ExecutionStatus, type MindNode, type Priority } from '../shared/types/workspace';
+import {
+  clampNodeFontSize,
+  defaultNodeFontSize,
+  maxNodeFontSize,
+  minNodeFontSize,
+  nodeFontOptions,
+  nodeFontWeightOptions
+} from '../shared/nodeTypography';
 
 type SelectionBarProps = {
   node?: MindNode;
   lastSnapshotAt?: string;
   readOnly?: boolean;
   onUpdate: (id: string, patch: Partial<MindNode>) => void;
-  onAddChild: () => void;
-  onDelete: () => void;
 };
 
 function parseTags(value: string) {
@@ -16,7 +22,7 @@ function parseTags(value: string) {
     .filter(Boolean);
 }
 
-export function SelectionBar({ node, lastSnapshotAt, readOnly, onUpdate, onAddChild, onDelete }: SelectionBarProps) {
+export function SelectionBar({ node, lastSnapshotAt, readOnly, onUpdate }: SelectionBarProps) {
   if (!node) {
     return (
       <div className="selection-bar">
@@ -28,6 +34,7 @@ export function SelectionBar({ node, lastSnapshotAt, readOnly, onUpdate, onAddCh
 
   const isRoot = node.kind === 'root';
   const canExecute = node.kind === 'case';
+  const selectedFontSize = node.fontSize ?? defaultNodeFontSize;
 
   if (readOnly) {
     return (
@@ -56,6 +63,57 @@ export function SelectionBar({ node, lastSnapshotAt, readOnly, onUpdate, onAddCh
         onChange={(event) => onUpdate(node.id, { title: event.target.value })}
         aria-label="节点标题"
       />
+      <div className="selection-style-group" aria-label="节点字体样式">
+        <select
+          value={node.fontFamily || ''}
+          onChange={(event) => onUpdate(node.id, { fontFamily: event.target.value || undefined })}
+          aria-label="节点字体"
+        >
+          {nodeFontOptions.map((font) => (
+            <option value={font.value || ''} key={font.label}>
+              {font.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="style-stepper"
+          onClick={() => onUpdate(node.id, { fontSize: clampNodeFontSize(selectedFontSize - 1) })}
+          disabled={selectedFontSize <= minNodeFontSize}
+          aria-label="减小节点字号"
+        >
+          A-
+        </button>
+        <input
+          className="font-size-input"
+          type="number"
+          min={minNodeFontSize}
+          max={maxNodeFontSize}
+          value={selectedFontSize}
+          onChange={(event) => onUpdate(node.id, { fontSize: clampNodeFontSize(Number(event.target.value)) })}
+          aria-label="节点字号"
+        />
+        <button
+          type="button"
+          className="style-stepper"
+          onClick={() => onUpdate(node.id, { fontSize: clampNodeFontSize(selectedFontSize + 1) })}
+          disabled={selectedFontSize >= maxNodeFontSize}
+          aria-label="增大节点字号"
+        >
+          A+
+        </button>
+        <select
+          value={node.fontWeight || ''}
+          onChange={(event) => onUpdate(node.id, { fontWeight: event.target.value ? Number(event.target.value) : undefined })}
+          aria-label="节点字重"
+        >
+          {nodeFontWeightOptions.map((weight) => (
+            <option value={weight.value || ''} key={weight.label}>
+              {weight.label}
+            </option>
+          ))}
+        </select>
+      </div>
       {!isRoot && (
         <select
           value={node.priority || ''}
@@ -105,13 +163,7 @@ export function SelectionBar({ node, lastSnapshotAt, readOnly, onUpdate, onAddCh
         aria-label="图片 URL"
       />
       {lastSnapshotAt && <small>快照 {lastSnapshotAt}</small>}
-      <button onClick={onAddChild}>新增下级</button>
       <button>重新生成本阶段</button>
-      {!isRoot && (
-        <button className="danger" onClick={onDelete}>
-          删除
-        </button>
-      )}
     </div>
   );
 }

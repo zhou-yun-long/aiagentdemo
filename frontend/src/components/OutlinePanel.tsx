@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { executionStatusLabels, type ExecutionStatus, type MindNode } from '../shared/types/workspace';
 
@@ -13,6 +13,29 @@ export function OutlinePanel({ nodes, selectedId, onSelect, onClose }: OutlinePa
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState<ExecutionStatus | 'all'>('all');
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const panel = (e.currentTarget as HTMLElement).parentElement!;
+    dragRef.current = { startX: e.clientX, startWidth: panel.offsetWidth };
+  }, []);
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragRef.current) return;
+      const delta = e.clientX - dragRef.current.startX;
+      const newWidth = Math.min(600, Math.max(180, dragRef.current.startWidth + delta));
+      document.documentElement.style.setProperty('--outline-width', `${newWidth}px`);
+    };
+    const onMouseUp = () => { dragRef.current = null; };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
 
   const visibleNodes = useMemo(() => {
     // First filter by kind
@@ -116,6 +139,7 @@ export function OutlinePanel({ nodes, selectedId, onSelect, onClose }: OutlinePa
           );
         })}
       </div>
+      <div className="outline-resize-handle" onMouseDown={handleResizeMouseDown} />
     </aside>
   );
 }

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { CheckCircle2, Circle, Loader2, PauseCircle, Play, RotateCcw, Square } from 'lucide-react';
+import { CheckCircle2, Circle, FileText, Image, Loader2, PauseCircle, Play, RotateCcw, Square, Upload, X } from 'lucide-react';
 import type { GeneratedCaseDraft, GenerateStage, GenerationMode } from '../types/generation';
 import { useGenerationStore } from '../features/generation/generationStore';
 import { useGenerateStream } from '../features/generation/useGenerateStream';
 import { useWorkspaceStore } from '../features/workspace/workspaceStore';
 import { batchConfirmCases, getDefaultProjectId, getTreeifyApiMode } from '../shared/api/treeify';
+import type { GenerationAttachmentRequest } from '../shared/types/treeify';
 import {
   draftToGeneratedCaseDto,
   generatedCaseDraftsToRows
@@ -24,9 +25,56 @@ const stageIcon = {
   waiting_confirm: <PauseCircle size={14} />
 };
 
+const TEXT_EXTENSIONS = new Set(['txt', 'md', 'markdown', 'json', 'csv', 'tsv', 'xml', 'html', 'htm', 'yml', 'yaml', 'log']);
+const MAX_ATTACHMENT_CHARS = 60000;
+const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+
+function extensionOf(fileName: string) {
+  const parts = fileName.toLowerCase().split('.');
+  return parts.length > 1 ? parts[parts.length - 1] : '';
+}
+
+function isTextLike(file: File) {
+  return file.type.startsWith('text/') || TEXT_EXTENSIONS.has(extensionOf(file.name));
+}
+
+function readAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('读取图片失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function fileToAttachment(file: File): Promise<GenerationAttachmentRequest> {
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    throw new Error(`${file.name} 超过 2MB，请先压缩或摘取关键内容`);
+  }
+
+  const kind = file.type.startsWith('image/') ? 'image' : 'document';
+  let content = '';
+
+  if (kind === 'image') {
+    content = await readAsDataUrl(file);
+  } else if (isTextLike(file)) {
+    content = (await file.text()).slice(0, MAX_ATTACHMENT_CHARS);
+  }
+
+  return {
+    kind,
+    fileName: file.name,
+    contentType: file.type || 'application/octet-stream',
+    size: file.size,
+    content
+  };
+}
+
 export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
   const [confirming, setConfirming] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [attachments, setAttachments] = useState<GenerationAttachmentRequest[]>([]);
+  const [attachmentError, setAttachmentError] = useState('');
   const mode = useGenerationStore((state) => state.mode);
   const input = useGenerationStore((state) => state.input);
   const status = useGenerationStore((state) => state.status);
@@ -44,14 +92,28 @@ export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
   const currentProjectId = useWorkspaceStore((state) => state.currentProjectId);
   const { startGeneration, confirmCurrentStage, cancelGeneration, retryGeneration } = useGenerateStream();
 
-  const canStart = input.trim().length > 0 && status !== 'running' && status !== 'waiting_confirm';
+  const canStart = (input.trim().length > 0 || attachments.length > 0) && status !== 'running' && status !== 'waiting_confirm';
   const canConfirm = status === 'waiting_confirm';
   const streamStage = activeStage ? stages[activeStage] : undefined;
 
   const apiMode = getTreeifyApiMode();
 
   const handleStart = async () => {
-    await startGeneration(input.trim(), mode);
+    await startGeneration(input.trim(), mode, attachments);
+  };
+
+  const handleAttachmentChange = async (files: FileList | null) => {
+    if (!files?.length) {
+      return;
+    }
+
+    setAttachmentError('');
+    try {
+      const next = await Promise.all(Array.from(files).map(fileToAttachment));
+      setAttachments((prev) => [...prev, ...next]);
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : '附件读取失败');
+    }
   };
 
   const handleConfirmStage = async () => {
@@ -82,6 +144,7 @@ export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
       onImportRows(generatedCaseDraftsToRows(cases));
     } finally {
       setConfirming(false);
+      resetTask();
     }
   };
 
@@ -94,7 +157,7 @@ export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
             <span className={`api-mode ${source}`}>{apiMode === 'auto' ? `auto/${source}` : apiMode}</span>
             {criticScore !== undefined && <span className="critic-score">Critic {criticScore}</span>}
           </div>
-          <button className="ghost small" onClick={() => { resetTask(); setFeedback(''); }}>
+          <button className="ghost small" onClick={() => { resetTask(); setFeedback(''); setAttachments([]); setAttachmentError(''); }}>
             重置
           </button>
         </div>
@@ -107,6 +170,40 @@ export function GeneratePanel({ onImportRows }: GeneratePanelProps) {
           </button>
         </div>
         <textarea className="requirement-input" value={input} onChange={(event) => setInput(event.target.value)} />
+        <div className="attachment-box">
+          <label className="attachment-upload">
+            <Upload size={14} />
+            添加文档/图片
+            <input
+              type="file"
+              multiple
+              accept="image/*,.txt,.md,.markdown,.json,.csv,.tsv,.xml,.html,.htm,.yml,.yaml,.log,.pdf,.doc,.docx"
+              onChange={(event) => {
+                handleAttachmentChange(event.target.files);
+                event.currentTarget.value = '';
+              }}
+            />
+          </label>
+          {attachments.length > 0 && (
+            <div className="attachment-list">
+              {attachments.map((attachment, index) => (
+                <div className="attachment-item" key={`${attachment.fileName}-${index}`}>
+                  {attachment.kind === 'image' ? <Image size={14} /> : <FileText size={14} />}
+                  <span>{attachment.fileName}</span>
+                  <small>{Math.max(1, Math.round(attachment.size / 1024))} KB</small>
+                  <button
+                    type="button"
+                    aria-label={`移除 ${attachment.fileName}`}
+                    onClick={() => setAttachments((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {attachmentError && <p className="attachment-error">{attachmentError}</p>}
+        </div>
         <div className="generate-actions">
           <button className="primary" disabled={!canStart} onClick={handleStart}>
             <Play size={14} />

@@ -5,9 +5,13 @@ import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseE
 import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName.STAGE_DONE;
 import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName.STAGE_STARTED;
 
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CriticReportDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GeneratedCaseDto;
+import com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser;
 import com.zoujuexian.aiagentdemo.service.treeify.agent.StageAgent;
 import com.zoujuexian.aiagentdemo.service.treeify.agent.StageContext;
 import com.zoujuexian.aiagentdemo.service.treeify.agent.StageResult;
@@ -34,7 +38,7 @@ public class OrchestrationService implements TreeifyGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(OrchestrationService.class);
     private static final int MAX_RETRY = 2;
-    private static final int CRITIC_PASS_SCORE = 60;
+    private static final int CRITIC_PASS_SCORE = 80;
 
     private final Map<String, StageAgent> agents;
     private final MockGenerationService fallback;
@@ -191,10 +195,10 @@ public class OrchestrationService implements TreeifyGenerationService {
         sink.next(event(taskId, STAGE_DONE, "critic", seq.getAndIncrement(),
                 Map.of("needConfirm", false, "result", criticResult.data())));
 
-        // Critic retry loop: if score < threshold, re-generate E3
-        if (score < CRITIC_PASS_SCORE) {
+        // Critic retry loop: if score < threshold or the critic asks for one retry, re-generate E3.
+        if (score < CRITIC_PASS_SCORE || extractRetryCount(criticResult.data()) > 0) {
             log.info("Critic score {} < {}, re-generating E3 with feedback for task {}", score, CRITIC_PASS_SCORE, taskId);
-            String feedback = "评审得分 " + score + " 分，请改进以下问题并重新生成更全面的测试用例。";
+            String feedback = buildRetryFeedback(score, criticResult.data());
             StageContext retryCtx = ctx.withFeedback(feedback);
 
             StageResult e3Retry = streamStage("e3", taskId, retryCtx, sink, seq, false);
@@ -219,11 +223,11 @@ public class OrchestrationService implements TreeifyGenerationService {
         try {
             return switch (stageName) {
                 case "e1" -> {
-                    var data = com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser.parseObject(collected);
+                    var data = JsonOutputParser.parseObject(collected);
                     yield new StageResult(collected.substring(0, Math.min(collected.length(), 200)), data);
                 }
                 case "e2" -> {
-                    var data = com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser.parseObject(collected);
+                    var data = JsonOutputParser.parseObject(collected);
                     yield new StageResult(collected.substring(0, Math.min(collected.length(), 200)), data);
                 }
                 case "e3" -> {
@@ -231,11 +235,8 @@ public class OrchestrationService implements TreeifyGenerationService {
                     yield new StageResult(collected.substring(0, Math.min(collected.length(), 200)), cases);
                 }
                 case "critic" -> {
-                    var data = com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser.parseObject(collected);
-                    int s = data != null ? data.getIntValue("score") : 80;
-                    var report = new com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CriticReportDto(
-                            s, List.of("AI 评审完成"), 0);
-                    yield new StageResult("评审完成", report);
+                    JSONObject data = JsonOutputParser.parseObject(collected);
+                    yield new StageResult("评审完成", toCriticReport(data));
                 }
                 default -> new StageResult(collected, collected);
             };
@@ -248,35 +249,10 @@ public class OrchestrationService implements TreeifyGenerationService {
 
     private List<GeneratedCaseDto> parseCasesFromText(String text) {
         try {
-            var arr = com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser.parseArray(text);
-            if (arr == null) return fallback.defaultCases();
-            List<GeneratedCaseDto> cases = new ArrayList<>();
-            for (int i = 0; i < arr.size(); i++) {
-                var obj = arr.getJSONObject(i);
-                cases.add(new GeneratedCaseDto(
-                        obj.getString("title"),
-                        obj.getString("precondition"),
-                        parseStringList(obj.getJSONArray("steps")),
-                        obj.getString("expected"),
-                        obj.getString("priority"),
-                        parseStringList(obj.getJSONArray("tags")),
-                        obj.getString("source"),
-                        obj.getString("pathType")
-                ));
-            }
-            return cases.isEmpty() ? fallback.defaultCases() : cases;
+            return GeneratedCaseJsonMapper.parseCases(text, fallback.defaultCases());
         } catch (Exception e) {
             return fallback.defaultCases();
         }
-    }
-
-    private List<String> parseStringList(com.alibaba.fastjson.JSONArray arr) {
-        if (arr == null) return List.of();
-        List<String> result = new ArrayList<>();
-        for (int i = 0; i < arr.size(); i++) {
-            result.add(arr.getString(i));
-        }
-        return result;
     }
 
     // ──── Synchronous orchestration (kept for backward-compat) ────
@@ -430,10 +406,77 @@ public class OrchestrationService implements TreeifyGenerationService {
     }
 
     private int extractScore(Object data) {
-        if (data instanceof com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CriticReportDto report) {
+        if (data instanceof CriticReportDto report) {
             return report.score();
         }
         return 80;
+    }
+
+    private int extractRetryCount(Object data) {
+        if (data instanceof CriticReportDto report) {
+            return Math.max(0, report.retryCount());
+        }
+        return 0;
+    }
+
+    private String buildRetryFeedback(int score, Object criticData) {
+        List<String> issues = criticData instanceof CriticReportDto report && report.issues() != null
+                ? report.issues()
+                : List.of();
+        if (issues.isEmpty()) {
+            return "评审得分 " + score + " 分，请补充核心对象覆盖、异常路径、边界场景和可观察预期结果后重新生成。";
+        }
+        List<String> topIssues = issues.size() > 5 ? issues.subList(0, 5) : issues;
+        return "评审得分 " + score + " 分，请针对以下问题重新生成测试用例：" + String.join("；", topIssues);
+    }
+
+    private CriticReportDto toCriticReport(JSONObject data) {
+        int score = data != null ? clamp(data.getIntValue("score"), 0, 100) : 80;
+        List<String> issues = parseCriticIssues(data);
+        if (issues.isEmpty()) {
+            issues = score >= CRITIC_PASS_SCORE
+                    ? List.of("覆盖主流程、异常路径和关键边界条件")
+                    : List.of("评分偏低，但评审未返回具体问题；需要补充缺失对象和边界场景");
+        }
+        int retryCount = data != null ? clamp(data.getIntValue("retryCount"), 0, 1) : 0;
+        return new CriticReportDto(score, issues, retryCount);
+    }
+
+    private List<String> parseCriticIssues(JSONObject data) {
+        if (data == null) {
+            return List.of();
+        }
+        JSONArray arr = data.getJSONArray("issues");
+        if (arr == null || arr.isEmpty()) {
+            String issue = data.getString("issues");
+            return issue == null || issue.isBlank() ? List.of() : List.of(issue.trim());
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object item : arr) {
+            if (item instanceof String text && !text.isBlank()) {
+                issues.add(text.trim());
+            } else if (item instanceof JSONObject obj) {
+                String text = firstText(obj, "message", "issue", "description", "title");
+                if (!text.isBlank()) {
+                    issues.add(text);
+                }
+            }
+        }
+        return issues;
+    }
+
+    private String firstText(JSONObject obj, String... keys) {
+        for (String key : keys) {
+            String value = obj.getString(key);
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return "";
+    }
+
+    private int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private GenerateSseEventDto event(String taskId, GenerateSseEventName type, String stage, long sequence, Object payload) {

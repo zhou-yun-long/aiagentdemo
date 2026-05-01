@@ -242,7 +242,7 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
 
                 E2 拆分结果：""" + stringifyJson(e2Result) + """
 
-                请以 JSON 数组格式返回测试用例列表，每个用例包含：
+                请以 JSON 数组格式返回测试用例列表，必须使用以下英文字段名，且每个字段都不能为空：
                 - title: 用例标题
                 - precondition: 前置条件
                 - steps: 执行步骤列表
@@ -252,6 +252,7 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
                 - source: 来源("ai")
                 - pathType: 路径类型(happy/error/boundary/alternative)
 
+                expected 必须描述用户或系统最终可观察到的结果，不要省略。
                 覆盖正常路径、异常路径和边界场景。只返回 JSON 数组，不要添加其他文字。
                 """;
     }
@@ -262,7 +263,7 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
 
                 需求：""" + input + """
 
-                请以 JSON 数组格式返回测试用例列表，每个用例包含：
+                请以 JSON 数组格式返回测试用例列表，必须使用以下英文字段名，且每个字段都不能为空：
                 - title: 用例标题
                 - precondition: 前置条件
                 - steps: 执行步骤列表
@@ -272,6 +273,7 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
                 - source: 来源("ai")
                 - pathType: 路径类型(happy/error/boundary/alternative)
 
+                expected 必须描述用户或系统最终可观察到的结果，不要省略。
                 覆盖正常路径、异常路径和边界场景。只返回 JSON 数组，不要添加其他文字。
                 """;
     }
@@ -372,49 +374,12 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
     }
 
     private List<GeneratedCaseDto> parseCasesResponse(String response) {
-        if (response == null || response.isBlank()) {
-            return fallback.defaultCases();
-        }
-        String cleaned = response.trim();
-        if (cleaned.startsWith("```json")) {
-            cleaned = cleaned.substring(7);
-        } else if (cleaned.startsWith("```")) {
-            cleaned = cleaned.substring(3);
-        }
-        if (cleaned.endsWith("```")) {
-            cleaned = cleaned.substring(0, cleaned.length() - 3);
-        }
-        cleaned = cleaned.trim();
         try {
-            JSONArray arr = JSON.parseArray(cleaned);
-            List<GeneratedCaseDto> cases = new ArrayList<>();
-            for (int i = 0; i < arr.size(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                cases.add(new GeneratedCaseDto(
-                        obj.getString("title"),
-                        obj.getString("precondition"),
-                        parseStringList(obj.getJSONArray("steps")),
-                        obj.getString("expected"),
-                        obj.getString("priority"),
-                        parseStringList(obj.getJSONArray("tags")),
-                        obj.getString("source"),
-                        obj.getString("pathType")
-                ));
-            }
-            return cases.isEmpty() ? fallback.defaultCases() : cases;
+            return GeneratedCaseJsonMapper.parseCases(response, fallback.defaultCases());
         } catch (Exception e) {
             log.warn("Failed to parse cases response, using fallback: {}", e.getMessage());
             return fallback.defaultCases();
         }
-    }
-
-    private List<String> parseStringList(JSONArray arr) {
-        if (arr == null) return List.of();
-        List<String> result = new ArrayList<>();
-        for (int i = 0; i < arr.size(); i++) {
-            result.add(arr.getString(i));
-        }
-        return result;
     }
 
     // ──── Prompt helpers ────
