@@ -18,31 +18,21 @@ function buildNodeTree(projectName: string, cases: TestCaseDto[]): MindNode[] {
     order: 0
   };
 
-  const group: MindNode = {
-    id: 'default-group',
-    parentId: 'root',
-    title: '默认模块',
-    kind: 'group',
-    priority: 'P1',
-    source: 'manual',
-    version: 1,
-    lane: 'middle',
-    depth: 1,
-    order: 0
-  };
-
   if (!cases.length) {
-    return [root, group];
+    return [root];
   }
 
   const caseNodes = testCasesToMindNodes(cases).map((node) => {
     if (node.kind === 'case' && !node.parentId) {
-      return { ...node, parentId: group.id, depth: 2 };
+      return { ...node, parentId: root.id, depth: 1 };
+    }
+    if (node.depth > 1) {
+      return { ...node, depth: node.depth - 1 };
     }
     return node;
   });
 
-  return [root, group, ...caseNodes];
+  return [root, ...caseNodes];
 }
 
 function normalizeMindmapTree(projectName: string, nodes: MindNode[]): MindNode[] {
@@ -60,19 +50,6 @@ function normalizeMindmapTree(projectName: string, nodes: MindNode[]): MindNode[
     };
 
   const existingGroup = nodes.find((node) => node.kind === 'group');
-  const group: MindNode =
-    existingGroup ?? {
-      id: 'default-group',
-      parentId: root.id,
-      title: '默认模块',
-      kind: 'group',
-      priority: 'P1',
-      source: 'manual',
-      version: 1,
-      lane: 'middle',
-      depth: 1,
-      order: 0
-    };
 
   const normalizedNodes = nodes.map((node) => {
     if (node.id === root.id) {
@@ -84,7 +61,10 @@ function normalizeMindmapTree(projectName: string, nodes: MindNode[]): MindNode[
     }
 
     if (node.kind === 'case' && !node.parentId) {
-      return { ...node, parentId: group.id, depth: Math.max(node.depth, group.depth + 1) };
+      if (existingGroup) {
+        return { ...node, parentId: existingGroup.id, depth: Math.max(node.depth, existingGroup.depth + 1) };
+      }
+      return { ...node, parentId: root.id, depth: 1 };
     }
 
     return node;
@@ -92,7 +72,6 @@ function normalizeMindmapTree(projectName: string, nodes: MindNode[]): MindNode[
 
   return [
     ...(existingRoot ? [] : [root]),
-    ...(existingGroup ? [] : [group]),
     ...normalizedNodes
   ];
 }
