@@ -624,6 +624,7 @@ public class TreeifyPersistenceService {
                 entity.getTags() == null ? List.of() : List.copyOf(entity.getTags()),
                 entity.getSource(),
                 entity.getExecutionStatus(),
+                entity.getReviewStatus(),
                 entity.getLayout() == null ? Map.of("collapsed", false) : Map.copyOf(entity.getLayout()),
                 entity.getVersion(),
                 entity.getCreatedAt(),

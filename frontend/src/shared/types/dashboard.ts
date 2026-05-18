@@ -4,6 +4,13 @@ export type RecentActivity = {
   timestamp: string;
 };
 
+export type ReviewStatsDto = {
+  pending: number;
+  approved: number;
+  rejected: number;
+  needsRevision: number;
+};
+
 export type DashboardDto = {
   totalCases: number;
   coveredCases: number;
@@ -12,4 +19,5 @@ export type DashboardDto = {
   blockedCases: number;
   passRate: number;
   recentActivity: RecentActivity[];
+  reviewStats?: ReviewStatsDto;
 };

@@ -22,6 +22,8 @@ public enum ApiErrorCode {
     EXPORT_TEMPLATE_INVALID(4002, HttpStatus.INTERNAL_SERVER_ERROR, "用例 Excel 模板缺失或损坏"),
     EXPORT_PDF_FAILED(4003, HttpStatus.INTERNAL_SERVER_ERROR, "PDF 报告渲染失败"),
     PLAN_INVALID_STATE(1001, HttpStatus.BAD_REQUEST, "测试计划状态非法"),
+    DEFECT_INVALID_STATE(1001, HttpStatus.BAD_REQUEST, "缺陷状态不允许该操作"),
+    REVIEW_INVALID_STATE(1001, HttpStatus.BAD_REQUEST, "评审状态不允许该操作"),
     INTERNAL_ERROR(5000, HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
 
     private final int code;

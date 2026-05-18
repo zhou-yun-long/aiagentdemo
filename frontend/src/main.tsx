@@ -12,6 +12,8 @@ import PlansPage from './pages/PlansPage';
 import PlanDetailPage from './pages/PlanDetailPage';
 import ReportsPage from './pages/ReportsPage';
 import ReportDetailPage from './pages/ReportDetailPage';
+import DefectsPage from './pages/DefectsPage';
+import ReviewsPage from './pages/ReviewsPage';
 import LegacyRedirect from './components/LegacyRedirect';
 import ProjectLayout from './layouts/ProjectLayout';
 import './styles/app.css';
@@ -57,6 +59,8 @@ createRoot(document.getElementById('root')!).render(
             <Route path="plans/:planId" element={<PlanDetailPage />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="reports/:reportId" element={<ReportDetailPage />} />
+            <Route path="defects" element={<DefectsPage />} />
+            <Route path="reviews" element={<ReviewsPage />} />
           </Route>
 
           {/* 分享视图（独立，无 Sidebar） */}

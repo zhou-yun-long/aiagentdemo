@@ -16,6 +16,7 @@ public record TestCaseDto(
         List<String> tags,
         String source,
         String executionStatus,
+        String reviewStatus,
         Map<String, Object> layout,
         int version,
         LocalDateTime createdAt,

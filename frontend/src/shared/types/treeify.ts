@@ -82,6 +82,7 @@ export type TestCaseDto = {
   tags: string[];
   source: string;
   executionStatus: ExecutionStatus;
+  reviewStatus?: string;
   layout?: Record<string, unknown>;
   version: number;
   createdAt: string;

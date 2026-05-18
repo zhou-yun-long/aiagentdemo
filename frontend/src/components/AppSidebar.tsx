@@ -6,6 +6,8 @@ import {
   Wand2,
   ClipboardList,
   BarChart3,
+  Bug,
+  ClipboardCheck,
   Settings,
   FolderOpen,
   BookOpen,
@@ -30,6 +32,8 @@ const mainNavItems = [
   { to: 'generate', label: '用例生成', icon: Wand2 },
   { to: 'plans', label: '测试计划', icon: ClipboardList },
   { to: 'reports', label: '测试报告', icon: BarChart3 },
+  { to: 'defects', label: '缺陷跟踪', icon: Bug },
+  { to: 'reviews', label: '用例评审', icon: ClipboardCheck },
 ];
 
 const settingsItems = [

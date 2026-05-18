@@ -15,6 +15,10 @@ public interface TreeifyTestCaseRepository extends JpaRepository<TreeifyTestCase
 
     long countByProjectIdAndExecutionStatus(Long projectId, String executionStatus);
 
+    long countByProjectIdAndReviewStatus(Long projectId, String reviewStatus);
+
+    List<TreeifyTestCase> findAllByProjectIdAndReviewStatusOrderById(Long projectId, String reviewStatus);
+
     @Query("SELECT t.projectId, COUNT(t), " +
            "SUM(CASE WHEN t.executionStatus != 'not_run' THEN 1 ELSE 0 END), " +
            "SUM(CASE WHEN t.executionStatus = 'passed' THEN 1 ELSE 0 END) " +

@@ -54,6 +54,9 @@ public class TreeifyTestCase {
     @Column(length = 32)
     private String executionStatus;
 
+    @Column(length = 32)
+    private String reviewStatus;
+
     @Column(length = 8)
     private String granularity;
 
@@ -109,6 +112,9 @@ public class TreeifyTestCase {
 
     public String getExecutionStatus() { return executionStatus; }
     public void setExecutionStatus(String executionStatus) { this.executionStatus = executionStatus; }
+
+    public String getReviewStatus() { return reviewStatus; }
+    public void setReviewStatus(String reviewStatus) { this.reviewStatus = reviewStatus; }
 
     public String getGranularity() { return granularity; }
     public void setGranularity(String granularity) { this.granularity = granularity; }
