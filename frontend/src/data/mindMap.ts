@@ -3,7 +3,7 @@ import type { MindNode } from '../shared/types/workspace';
 export const initialMindNodes: MindNode[] = [
   {
     id: 'root',
-    title: 'speccase 登录用例集',
+    title: '测试平台 登录用例集',
     kind: 'root',
     source: 'manual',
     version: 1,

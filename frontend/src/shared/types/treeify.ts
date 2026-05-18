@@ -1,8 +1,6 @@
 import type { ExecutionStatus, Priority } from './workspace';
 import type { GeneratedCaseDraft, GenerationMode, GenerateStage } from '../../types/generation';
 
-export type TreeifyApiMode = 'auto' | 'mock' | 'real';
-
 export type ProjectDto = {
   id: number;
   name: string;
@@ -20,6 +18,7 @@ export type ProjectRequest = {
 export type CreateGenerateTaskRequest = {
   mode: GenerationMode;
   input: string;
+  taskKind?: string;
   prdDocumentId?: number;
   contextCaseIds?: number[];
   selectedNodeId?: string;
@@ -66,6 +65,9 @@ export type GeneratedCaseDto = {
   tags?: string[];
   source?: string;
   pathType?: string;
+  draftCaseId?: string;
+  objectIds?: string[];
+  requirementIds?: string[];
 };
 
 export type TestCaseDto = {
@@ -114,10 +116,11 @@ export type GenerateSsePayload = {
   needConfirm?: boolean;
   criticScore?: number;
   cases?: GeneratedCaseDto[];
+  points?: Array<{ objectId: string; title: string; priority: string; dimensions?: string[] }>;
 };
 
 export type GenerateSseEventDto = {
-  event: 'stage_started' | 'stage_chunk' | 'stage_done' | 'generation_complete';
+  event: 'stage_started' | 'stage_chunk' | 'stage_done' | 'generation_complete' | 'points_complete';
   taskId: string;
   stage: GenerateStage | null;
   sequence: number;
@@ -204,6 +207,32 @@ export type ShareDataDto = {
   cases: TestCaseDto[];
   mindmap: MindmapNodeDto[];
   stats: CaseStatsDto;
+};
+
+export type TraceNodeDto = {
+  id: string;
+  kind: 'requirement' | 'object' | 'case';
+  title: string;
+  summary: string;
+  priority?: Priority;
+  caseId?: number;
+  draftCaseId?: string;
+  raw?: Record<string, unknown>;
+};
+
+export type TraceEdgeDto = {
+  id: string;
+  fromId: string;
+  toId: string;
+  relation: string;
+};
+
+export type TraceGraphDto = {
+  projectId: number;
+  taskId?: string;
+  nodes: TraceNodeDto[];
+  edges: TraceEdgeDto[];
+  updatedAt?: string;
 };
 
 export type McpServerInfo = {

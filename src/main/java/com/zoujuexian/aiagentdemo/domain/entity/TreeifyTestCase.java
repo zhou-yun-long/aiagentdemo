@@ -54,6 +54,15 @@ public class TreeifyTestCase {
     @Column(length = 32)
     private String executionStatus;
 
+    @Column(length = 8)
+    private String granularity;
+
+    @Column(length = 512)
+    private String platforms;
+
+    @Column(name = "scenario_tags", length = 512)
+    private String scenarioTags;
+
     @Convert(converter = JsonMapConverter.class)
     @Column(length = 2000)
     private Map<String, Object> layout = new LinkedHashMap<>();
@@ -100,6 +109,15 @@ public class TreeifyTestCase {
 
     public String getExecutionStatus() { return executionStatus; }
     public void setExecutionStatus(String executionStatus) { this.executionStatus = executionStatus; }
+
+    public String getGranularity() { return granularity; }
+    public void setGranularity(String granularity) { this.granularity = granularity; }
+
+    public String getPlatforms() { return platforms; }
+    public void setPlatforms(String platforms) { this.platforms = platforms; }
+
+    public String getScenarioTags() { return scenarioTags; }
+    public void setScenarioTags(String scenarioTags) { this.scenarioTags = scenarioTags; }
 
     public Map<String, Object> getLayout() { return layout; }
     public void setLayout(Map<String, Object> layout) { this.layout = layout; }

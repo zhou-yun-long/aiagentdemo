@@ -51,6 +51,13 @@ public class TreeifyGenerationTask {
     @Column(length = 2000)
     private String feedback;
 
+    @Column(length = 32)
+    private String taskKind;
+
+    @Lob
+    @Column(name = "config_json")
+    private String generationConfigJson;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -108,4 +115,10 @@ public class TreeifyGenerationTask {
 
     public LocalDateTime getCompletedAt() { return completedAt; }
     public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
+
+    public String getTaskKind() { return taskKind; }
+    public void setTaskKind(String taskKind) { this.taskKind = taskKind; }
+
+    public String getGenerationConfigJson() { return generationConfigJson; }
+    public void setGenerationConfigJson(String generationConfigJson) { this.generationConfigJson = generationConfigJson; }
 }

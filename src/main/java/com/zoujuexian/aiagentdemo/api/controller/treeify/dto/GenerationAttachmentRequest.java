@@ -5,6 +5,6 @@ public record GenerationAttachmentRequest(
         String fileName,
         String contentType,
         Long size,
-        String content
+        String attachmentId
 ) {
 }

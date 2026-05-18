@@ -16,14 +16,9 @@ import type {
   SnapshotDto,
   TestCaseRequest,
   TestCaseDto,
-  TreeifyApiMode
+  TraceGraphDto
 } from '../types/treeify';
 import { request } from './request';
-
-export function getTreeifyApiMode(): TreeifyApiMode {
-  const mode = import.meta.env.VITE_TREEIFY_API_MODE;
-  return mode === 'mock' || mode === 'real' || mode === 'auto' ? mode : 'auto';
-}
 
 export function getDefaultProjectId() {
   const projectId = Number(import.meta.env.VITE_TREEIFY_PROJECT_ID || 1);
@@ -54,6 +49,16 @@ export function archiveProject(projectId: number) {
   });
 }
 
+export function restoreProject(projectId: number) {
+  return request<ProjectDto>(`/api/v1/projects/${projectId}/restore`, {
+    method: 'PATCH'
+  });
+}
+
+export function getAllProjectStats() {
+  return request<Record<number, CaseStatsDto>>('/api/v1/projects/cases/stats');
+}
+
 export function getProject(projectId = getDefaultProjectId()) {
   return request<ProjectDto>(`/api/v1/projects/${projectId}`);
 }
@@ -64,6 +69,13 @@ export function getProjectCases(projectId = getDefaultProjectId()) {
 
 export function getProjectCaseStats(projectId = getDefaultProjectId()) {
   return request<CaseStatsDto>(`/api/v1/projects/${projectId}/cases/stats`);
+}
+
+export function createCase(projectId: number, body: TestCaseRequest) {
+  return request<TestCaseDto>(`/api/v1/projects/${projectId}/cases`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
 }
 
 export function updateCase(caseId: number, body: TestCaseRequest) {
@@ -130,6 +142,17 @@ export function saveMindmap(projectId: number, nodes: MindmapNodeDto[]) {
 
 export function getMindmap(projectId: number) {
   return request<MindmapNodeDto[]>(`/api/v1/projects/${projectId}/mindmap`);
+}
+
+export function getTraceability(projectId: number) {
+  return request<TraceGraphDto>(`/api/v1/projects/${projectId}/traceability`);
+}
+
+export function saveTraceability(projectId: number, graph: TraceGraphDto) {
+  return request<TraceGraphDto>(`/api/v1/projects/${projectId}/traceability`, {
+    method: 'PUT',
+    body: JSON.stringify(graph)
+  });
 }
 
 export function getProjectSummary(projectId: number) {

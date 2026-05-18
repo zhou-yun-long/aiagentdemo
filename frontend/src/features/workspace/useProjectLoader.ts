@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { initialMindNodes } from '../../data/mindMap';
-import { getMindmap, getProjectCases, getProjectCaseStats, getTreeifyApiMode, listProjects, saveMindmap } from '../../shared/api/treeify';
-import type { ProjectDto, TestCaseDto } from '../../shared/types/treeify';
+import { getMindmap, getProjectCases, getProjectCaseStats, saveMindmap } from '../../shared/api/treeify';
+import type { TestCaseDto } from '../../shared/types/treeify';
 import type { MindNode } from '../../shared/types/workspace';
 import { mindNodeFromDto, mindNodeToDto, statsFromServer, testCasesToMindNodes } from '../../shared/transforms/treeifyTransforms';
 import { useWorkspaceStore } from './workspaceStore';
+import { useProjectListStore } from '../navigation/projectListStore';
 
 function buildNodeTree(projectName: string, cases: TestCaseDto[]): MindNode[] {
   const root: MindNode = {
@@ -84,7 +85,7 @@ export function useProjectLoader() {
   const pageError = useWorkspaceStore((state) => state.pageError);
   const readOnly = useWorkspaceStore((state) => state.readOnly);
 
-  const [projects, setProjects] = useState<ProjectDto[]>([]);
+  const projects = useProjectListStore.getState().projects;
 
   const loadCasesFromCasesApi = useCallback(
     async (projectId: number, projectName: string) => {
@@ -121,8 +122,11 @@ export function useProjectLoader() {
   );
 
   const loadFromApi = useCallback(async () => {
-    const allProjects = await listProjects();
-    setProjects(allProjects);
+    const store = useProjectListStore.getState();
+    if (store.projects.length === 0) {
+      await store.fetchProjects();
+    }
+    const allProjects = useProjectListStore.getState().projects;
 
     // Deep-link support: check URL for projectId param
     const urlProjectId = new URLSearchParams(window.location.search).get('projectId');
@@ -155,12 +159,13 @@ export function useProjectLoader() {
       }
     }
 
-    const project = projects.find((p) => p.id === projectId);
+    const allProjects = useProjectListStore.getState().projects;
+    const project = allProjects.find((p) => p.id === projectId);
     if (!project) return;
 
     useWorkspaceStore.setState({ currentProjectId: projectId });
     await loadCases(projectId, project.name);
-  }, [projects, loadCases]);
+  }, [loadCases]);
 
   const reloadCases = useCallback(async () => {
     const projectId = useWorkspaceStore.getState().currentProjectId;
@@ -169,8 +174,9 @@ export function useProjectLoader() {
     }
 
     try {
-      const projects = await listProjects();
-      const project = projects.find((project) => project.id === projectId);
+      await useProjectListStore.getState().fetchProjects();
+      const allProjects = useProjectListStore.getState().projects;
+      const project = allProjects.find((p) => p.id === projectId);
       if (!project) {
         return;
       }
@@ -185,24 +191,11 @@ export function useProjectLoader() {
       return;
     }
 
-    const apiMode = getTreeifyApiMode();
-
-    if (apiMode === 'mock') {
-      setPageStatus('ready');
-      setServerStats(null);
-      return;
-    }
-
     loadFromApi().catch((error) => {
-      if (apiMode === 'real') {
-        const message = error instanceof Error ? error.message : '加载项目数据失败';
-        setPageStatus('error', message);
-        return;
-      }
-      setPageStatus('ready');
-      setServerStats(null);
+      const message = error instanceof Error ? error.message : '加载项目数据失败';
+      setPageStatus('error', message);
     });
-  }, [readOnly, loadFromApi, setPageStatus, setServerStats]);
+  }, [readOnly, loadFromApi, setPageStatus]);
 
   return { reloadCases, switchProject, projects, pageStatus, pageError };
 }

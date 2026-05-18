@@ -10,6 +10,12 @@ public record GeneratedCaseDto(
         String priority,
         List<String> tags,
         String source,
-        String pathType
+        String pathType,
+        String draftCaseId,
+        List<String> objectIds,
+        List<String> requirementIds,
+        String granularity,
+        List<String> platforms,
+        List<String> scenarioTags
 ) {
 }

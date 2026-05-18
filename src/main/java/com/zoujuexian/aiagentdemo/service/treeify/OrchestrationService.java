@@ -1,6 +1,7 @@
 package com.zoujuexian.aiagentdemo.service.treeify;
 
 import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName.GENERATION_COMPLETE;
+import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName.POINTS_COMPLETE;
 import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName.STAGE_CHUNK;
 import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName.STAGE_DONE;
 import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName.STAGE_STARTED;
@@ -10,6 +11,7 @@ import com.alibaba.fastjson.JSONObject;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CriticReportDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerationConfig;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GeneratedCaseDto;
 import com.zoujuexian.aiagentdemo.service.treeify.agent.JsonOutputParser;
 import com.zoujuexian.aiagentdemo.service.treeify.agent.StageAgent;
@@ -41,20 +43,16 @@ public class OrchestrationService implements TreeifyGenerationService {
     private static final int CRITIC_PASS_SCORE = 80;
 
     private final Map<String, StageAgent> agents;
-    private final MockGenerationService fallback;
     private final SummaryService summaryService;
     private final KnowledgeService knowledgeService;
-    private final boolean llmAvailable;
 
-    public OrchestrationService(Map<String, StageAgent> agents, MockGenerationService fallback,
+    public OrchestrationService(Map<String, StageAgent> agents,
                                  SummaryService summaryService, KnowledgeService knowledgeService,
                                  String apiKey) {
         this.agents = agents;
-        this.fallback = fallback;
         this.summaryService = summaryService;
         this.knowledgeService = knowledgeService;
-        this.llmAvailable = apiKey != null && !apiKey.isBlank() && !"test".equals(apiKey);
-        log.info("OrchestrationService initialized with stages: {}, llmAvailable={}", agents.keySet(), llmAvailable);
+        log.info("OrchestrationService initialized with stages: {}", agents.keySet());
     }
 
     // ──── Synchronous (backward-compatible) ────
@@ -62,15 +60,7 @@ public class OrchestrationService implements TreeifyGenerationService {
     @Override
     public List<GenerateSseEventDto> buildEvents(String taskId, String mode, String input, String currentStage,
                                                   String e1Result, String e2Result, String feedback, Long projectId) {
-        if (!llmAvailable) {
-            return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
-        }
-        try {
-            return orchestrateSync(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
-        } catch (Exception e) {
-            log.warn("AI generation failed for task {}, falling back to mock: {}", taskId, e.getMessage());
-            return fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
-        }
+        return orchestrateSync(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
     }
 
     // ──── Streaming (real-time LLM) ────
@@ -78,12 +68,16 @@ public class OrchestrationService implements TreeifyGenerationService {
     @Override
     public Flux<GenerateSseEventDto> streamEvents(String taskId, String mode, String input, String currentStage,
                                                     String e1Result, String e2Result, String feedback, Long projectId) {
-        if (!llmAvailable) {
-            return Flux.fromIterable(fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId));
-        }
+        return streamEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId, null);
+    }
+
+    @Override
+    public Flux<GenerateSseEventDto> streamEvents(String taskId, String mode, String input, String currentStage,
+                                                    String e1Result, String e2Result, String feedback,
+                                                    Long projectId, GenerationConfig config) {
         return Flux.<GenerateSseEventDto>create(sink -> {
             try {
-                StageContext baseCtx = buildContext(taskId, input, projectId);
+                StageContext baseCtx = buildContext(taskId, input, projectId, config);
                 if ("step".equals(mode)) {
                     streamStepMode(taskId, currentStage, e1Result, e2Result, feedback, baseCtx, sink);
                 } else {
@@ -91,9 +85,9 @@ public class OrchestrationService implements TreeifyGenerationService {
                 }
                 sink.complete();
             } catch (Exception e) {
-                log.warn("AI streaming failed for task {}, falling back to mock: {}", taskId, e.getMessage());
-                fallback.buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId)
-                        .forEach(sink::next);
+                log.error("AI streaming failed for task {}: {}", taskId, e.getMessage(), e);
+                sink.next(event(taskId, GENERATION_COMPLETE, null, 0,
+                        Map.of("criticScore", 0, "cases", List.of(), "error", e.getMessage())));
                 sink.complete();
             }
         }).subscribeOn(Schedulers.boundedElastic());
@@ -101,6 +95,7 @@ public class OrchestrationService implements TreeifyGenerationService {
 
     private void streamAutoMode(String taskId, StageContext ctx, FluxSink<GenerateSseEventDto> sink) {
         AtomicLong seq = new AtomicLong(1);
+        String taskKind = ctx.taskKind();
 
         // E1
         StageResult e1 = streamStage("e1", taskId, ctx, sink, seq, false);
@@ -110,7 +105,15 @@ public class OrchestrationService implements TreeifyGenerationService {
         StageResult e2 = streamStage("e2", taskId, ctx, sink, seq, false);
         ctx = ctx.withResult("e2", e2.data());
 
-        // E3
+        // For "points" taskKind, stop after E2 and emit points_complete
+        if ("points".equals(taskKind)) {
+            log.info("taskKind=points for task {}, skipping E3+Critic, emitting points_complete", taskId);
+            sink.next(event(taskId, POINTS_COMPLETE, null, seq.getAndIncrement(),
+                    Map.of("e1Result", e1.data(), "e2Result", e2.data())));
+            return;
+        }
+
+        // Default "cases" pipeline: E3 → Critic
         StageResult e3 = streamStage("e3", taskId, ctx, sink, seq, false);
         ctx = ctx.withResult("e3", e3.data());
 
@@ -139,7 +142,9 @@ public class OrchestrationService implements TreeifyGenerationService {
     }
 
     /**
-     * Stream a single stage: STAGE_STARTED → LLM tokens as STAGE_CHUNK → STAGE_DONE.
+     * Execute a single stage: STAGE_STARTED → sync LLM call → STAGE_DONE.
+     * Uses synchronous execution because the LLM (mimo-v2.5-pro) is a reasoning model
+     * whose streaming response uses reasoning_content that Spring AI cannot parse.
      * Returns the parsed StageResult for chaining to the next stage.
      */
     private StageResult streamStage(String stageName, String taskId, StageContext ctx,
@@ -152,32 +157,11 @@ public class OrchestrationService implements TreeifyGenerationService {
 
         sink.next(event(taskId, STAGE_STARTED, stageName, seq.getAndIncrement(), Map.of("stage", stageName)));
 
-        // Stream LLM tokens in real-time
-        StringBuilder collected = new StringBuilder();
-        try {
-            agent.streamExecute(ctx)
-                    .doOnNext(chunk -> {
-                        collected.append(chunk);
-                        sink.next(event(taskId, STAGE_CHUNK, stageName, seq.getAndIncrement(),
-                                Map.of("content", chunk)));
-                    })
-                    .doOnError(e -> log.warn("Streaming error for stage {}: {}", stageName, e.getMessage()))
-                    .blockLast(Duration.ofSeconds(60));
-        } catch (Exception e) {
-            log.warn("Stage {} streaming failed, using synchronous fallback: {}", stageName, e.getMessage());
-            StageResult result = executeStageWithRetry(stageName, ctx);
-            sink.next(event(taskId, STAGE_CHUNK, stageName, seq.getAndIncrement(),
-                    Map.of("content", result.content())));
-            sink.next(event(taskId, STAGE_DONE, stageName, seq.getAndIncrement(),
-                    Map.of("needConfirm", needConfirm, "result", result.data())));
-            return result;
-        }
-
-        // Parse the collected LLM output into a structured result
-        StageResult result = parseCollectedResult(stageName, ctx, collected.toString());
+        StageResult result = executeStageWithRetry(stageName, ctx);
+        sink.next(event(taskId, STAGE_CHUNK, stageName, seq.getAndIncrement(),
+                Map.of("content", result.content())));
         sink.next(event(taskId, STAGE_DONE, stageName, seq.getAndIncrement(),
                 Map.of("needConfirm", needConfirm, "result", result.data())));
-
         return result;
     }
 
@@ -221,7 +205,7 @@ public class OrchestrationService implements TreeifyGenerationService {
         // Re-run the synchronous execute which will make another LLM call (fast since it's cached)
         // OR parse the collected text directly
         try {
-            return switch (stageName) {
+            StageResult result = switch (stageName) {
                 case "e1" -> {
                     var data = JsonOutputParser.parseObject(collected);
                     yield new StageResult(collected.substring(0, Math.min(collected.length(), 200)), data);
@@ -236,10 +220,12 @@ public class OrchestrationService implements TreeifyGenerationService {
                 }
                 case "critic" -> {
                     JSONObject data = JsonOutputParser.parseObject(collected);
-                    yield new StageResult("评审完成", toCriticReport(data));
+                    yield new StageResult("评审完成", data);
                 }
                 default -> new StageResult(collected, collected);
             };
+            validateStageResult(stageName, result);
+            return result;
         } catch (Exception e) {
             log.warn("Failed to parse collected result for stage {}: {}", stageName, e.getMessage());
             // Fall back to synchronous execute for structured data
@@ -249,9 +235,10 @@ public class OrchestrationService implements TreeifyGenerationService {
 
     private List<GeneratedCaseDto> parseCasesFromText(String text) {
         try {
-            return GeneratedCaseJsonMapper.parseCases(text, fallback.defaultCases());
+            return GeneratedCaseJsonMapper.parseCases(text, List.of());
         } catch (Exception e) {
-            return fallback.defaultCases();
+            log.warn("Failed to parse cases from LLM text: {}", e.getMessage());
+            return List.of();
         }
     }
 
@@ -259,7 +246,7 @@ public class OrchestrationService implements TreeifyGenerationService {
 
     private List<GenerateSseEventDto> orchestrateSync(String taskId, String mode, String input, String currentStage,
                                                         String e1Result, String e2Result, String feedback, Long projectId) {
-        StageContext baseCtx = buildContext(taskId, input, projectId);
+        StageContext baseCtx = buildContext(taskId, input, projectId, null);
         if (!"step".equals(mode)) {
             return buildAutoEventsSync(taskId, baseCtx);
         }
@@ -274,6 +261,7 @@ public class OrchestrationService implements TreeifyGenerationService {
     private List<GenerateSseEventDto> buildAutoEventsSync(String taskId, StageContext ctx) {
         long seq = 1;
         List<GenerateSseEventDto> events = new ArrayList<>();
+        String taskKind = ctx.taskKind();
 
         StageResult e1 = executeStageWithRetry("e1", ctx);
         ctx = ctx.withResult("e1", e1.data());
@@ -287,6 +275,14 @@ public class OrchestrationService implements TreeifyGenerationService {
         events.add(event(taskId, STAGE_CHUNK, "e2", seq++, Map.of("content", e2.content())));
         events.add(event(taskId, STAGE_DONE, "e2", seq++, Map.of("needConfirm", false, "result", e2.data())));
 
+        // For "points" taskKind, stop after E2
+        if ("points".equals(taskKind)) {
+            events.add(event(taskId, POINTS_COMPLETE, null, seq++,
+                    Map.of("e1Result", e1.data(), "e2Result", e2.data())));
+            return events;
+        }
+
+        // Default "cases" pipeline: E3 → Critic
         StageResult e3 = executeStageWithRetry("e3", ctx);
         ctx = ctx.withResult("e3", e3.data());
         events.add(event(taskId, STAGE_STARTED, "e3", seq++, Map.of("stage", "e3")));
@@ -348,7 +344,7 @@ public class OrchestrationService implements TreeifyGenerationService {
 
     // ──── Context building ────
 
-    private StageContext buildContext(String taskId, String input, Long projectId) {
+    private StageContext buildContext(String taskId, String input, Long projectId, GenerationConfig config) {
         String summary = "";
         String ragContext = "";
         if (projectId != null) {
@@ -373,7 +369,7 @@ public class OrchestrationService implements TreeifyGenerationService {
             summary = summaryFuture.join();
             ragContext = ragFuture.join();
         }
-        return new StageContext(taskId, input, summary, ragContext);
+        return new StageContext(taskId, input, summary, ragContext, config);
     }
 
     // ──── Stage execution with retry ────
@@ -386,7 +382,9 @@ public class OrchestrationService implements TreeifyGenerationService {
         Exception lastError = null;
         for (int attempt = 0; attempt <= MAX_RETRY; attempt++) {
             try {
-                return agent.execute(context);
+                StageResult result = agent.execute(context);
+                validateStageResult(stageName, result);
+                return result;
             } catch (Exception e) {
                 lastError = e;
                 log.warn("Stage {} attempt {}/{} failed: {}", stageName, attempt + 1, MAX_RETRY + 1, e.getMessage());
@@ -405,9 +403,84 @@ public class OrchestrationService implements TreeifyGenerationService {
         return List.of();
     }
 
+    private void validateStageResult(String stageName, StageResult result) {
+        if ("e1".equals(stageName)) {
+            JSONArray requirements = arrayFrom(result.data(), "requirements", "items", "analysisPoints");
+            if (requirements == null || requirements.isEmpty()) {
+                throw new IllegalArgumentException("E1 schema missing requirements[]");
+            }
+            for (int i = 0; i < requirements.size(); i++) {
+                JSONObject item = requirements.getJSONObject(i);
+                if (item == null || !startsWith(item.getString("requirementId"), "req-")) {
+                    throw new IllegalArgumentException("E1 schema missing requirementId at index " + i);
+                }
+            }
+            return;
+        }
+
+        if ("e2".equals(stageName)) {
+            JSONArray objects = arrayFrom(result.data(), "objects", "items", "testObjects");
+            if (objects == null || objects.isEmpty()) {
+                throw new IllegalArgumentException("E2 schema missing objects[]");
+            }
+            for (int i = 0; i < objects.size(); i++) {
+                JSONObject item = objects.getJSONObject(i);
+                if (item == null || !startsWith(item.getString("objectId"), "obj-")) {
+                    throw new IllegalArgumentException("E2 schema missing objectId at index " + i);
+                }
+                if (!(item.get("requirementIds") instanceof JSONArray)) {
+                    throw new IllegalArgumentException("E2 schema missing requirementIds[] at index " + i);
+                }
+            }
+            return;
+        }
+
+        if ("e3".equals(stageName)) {
+            if (!(result.data() instanceof List<?> list) || list.isEmpty()) {
+                throw new IllegalArgumentException("E3 schema missing cases[]");
+            }
+            for (int i = 0; i < list.size(); i++) {
+                Object value = list.get(i);
+                if (!(value instanceof GeneratedCaseDto item)) {
+                    throw new IllegalArgumentException("E3 case is not GeneratedCaseDto at index " + i);
+                }
+                if (!startsWith(item.draftCaseId(), "case-")) {
+                    throw new IllegalArgumentException("E3 schema missing draftCaseId at index " + i);
+                }
+                if (item.objectIds() == null || item.objectIds().isEmpty()) {
+                    throw new IllegalArgumentException("E3 schema missing objectIds[] at index " + i);
+                }
+                if (item.requirementIds() == null || item.requirementIds().isEmpty()) {
+                    throw new IllegalArgumentException("E3 schema missing requirementIds[] at index " + i);
+                }
+            }
+        }
+    }
+
+    private JSONArray arrayFrom(Object value, String... keys) {
+        if (value instanceof JSONObject obj) {
+            for (String key : keys) {
+                Object candidate = obj.get(key);
+                if (candidate instanceof JSONArray arr) {
+                    return arr;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean startsWith(String value, String prefix) {
+        return value != null && value.startsWith(prefix);
+    }
+
     private int extractScore(Object data) {
         if (data instanceof CriticReportDto report) {
             return report.score();
+        }
+        if (data instanceof JSONObject json) {
+            Integer score = json.getInteger("overallScore");
+            if (score == null) score = json.getInteger("score");
+            return clamp(score != null ? score : 80, 0, 100);
         }
         return 80;
     }
@@ -416,13 +489,22 @@ public class OrchestrationService implements TreeifyGenerationService {
         if (data instanceof CriticReportDto report) {
             return Math.max(0, report.retryCount());
         }
+        if (data instanceof JSONObject json) {
+            Integer retry = json.getInteger("retryCount");
+            return clamp(retry != null ? retry : 0, 0, 1);
+        }
         return 0;
     }
 
     private String buildRetryFeedback(int score, Object criticData) {
-        List<String> issues = criticData instanceof CriticReportDto report && report.issues() != null
-                ? report.issues()
-                : List.of();
+        List<String> issues;
+        if (criticData instanceof CriticReportDto report && report.issues() != null) {
+            issues = report.issues();
+        } else if (criticData instanceof JSONObject json) {
+            issues = parseCriticIssues(json);
+        } else {
+            issues = List.of();
+        }
         if (issues.isEmpty()) {
             return "评审得分 " + score + " 分，请补充核心对象覆盖、异常路径、边界场景和可观察预期结果后重新生成。";
         }

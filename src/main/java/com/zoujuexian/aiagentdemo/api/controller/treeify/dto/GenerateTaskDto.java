@@ -12,9 +12,11 @@ public record GenerateTaskDto(
         Integer criticScore,
         String selectedNodeId,
         java.util.List<Long> contextCaseIds,
+        String taskKind,
         String e1Result,
         String e2Result,
         String feedback,
+        GenerationConfig generationConfig,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         LocalDateTime completedAt

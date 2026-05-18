@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import {
   deleteCase,
   getProjectCaseStats,
-  getTreeifyApiMode,
   updateCase,
   updateCaseExecutionStatus
 } from '../../shared/api/treeify';
@@ -28,7 +27,7 @@ export function useCasePersistence() {
     const caseIds = [...deletedCaseIds];
     const numericCaseIds = caseIds.map(Number).filter((caseId) => Number.isFinite(caseId) && caseId > 0);
 
-    if (getTreeifyApiMode() === 'mock' || numericCaseIds.length === 0) {
+    if (numericCaseIds.length === 0) {
       useWorkspaceStore.getState().markDeletedCasesClean(caseIds);
       return;
     }
@@ -73,7 +72,7 @@ export function useCasePersistence() {
         })
         .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
-      if (getTreeifyApiMode() === 'mock' || requests.length === 0) {
+      if (requests.length === 0) {
         useWorkspaceStore.getState().markStatusCasesClean(latestStatusDirtyIds);
         return;
       }
@@ -114,7 +113,7 @@ export function useCasePersistence() {
         })
         .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
-      if (getTreeifyApiMode() === 'mock' || requests.length === 0) {
+      if (requests.length === 0) {
         useWorkspaceStore.getState().markCasesClean(caseIds);
         return;
       }

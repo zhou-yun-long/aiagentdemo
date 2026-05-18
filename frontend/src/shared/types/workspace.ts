@@ -1,6 +1,6 @@
 export type ThemeMode = 'light' | 'dark';
 
-export type NodeKind = 'root' | 'group' | 'case' | 'condition' | 'step' | 'expected';
+export type NodeKind = 'root' | 'group' | 'case' | 'condition' | 'step' | 'expected' | 'artifact';
 
 export type Priority = 'P0' | 'P1' | 'P2' | 'P3';
 

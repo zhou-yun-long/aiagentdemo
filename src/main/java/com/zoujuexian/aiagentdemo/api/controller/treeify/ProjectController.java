@@ -5,12 +5,14 @@ import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ShareDataDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ShareDto;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TraceGraphDto;
 import com.zoujuexian.aiagentdemo.service.treeify.MockTreeifyService;
 import com.zoujuexian.aiagentdemo.service.treeify.ShareService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -57,6 +59,24 @@ public class ProjectController {
     @DeleteMapping("/projects/{projectId}")
     public ApiResponse<ProjectDto> archiveProject(@PathVariable Long projectId) {
         return ApiResponse.ok(treeifyService.archiveProject(projectId));
+    }
+
+    @PatchMapping("/projects/{projectId}/restore")
+    public ApiResponse<ProjectDto> restoreProject(@PathVariable Long projectId) {
+        return ApiResponse.ok(treeifyService.restoreProject(projectId));
+    }
+
+    @GetMapping("/projects/{projectId}/traceability")
+    public ApiResponse<TraceGraphDto> getTraceability(@PathVariable Long projectId) {
+        return ApiResponse.ok(treeifyService.getTraceability(projectId));
+    }
+
+    @PutMapping("/projects/{projectId}/traceability")
+    public ApiResponse<TraceGraphDto> saveTraceability(
+            @PathVariable Long projectId,
+            @RequestBody TraceGraphDto request
+    ) {
+        return ApiResponse.ok(treeifyService.saveTraceability(projectId, request));
     }
 
     @PostMapping("/projects/{projectId}/share")

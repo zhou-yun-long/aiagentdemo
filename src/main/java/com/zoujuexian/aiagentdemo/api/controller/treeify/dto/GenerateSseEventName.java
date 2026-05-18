@@ -13,6 +13,7 @@ public enum GenerateSseEventName {
     STAGE_STARTED("stage_started"),
     STAGE_CHUNK("stage_chunk"),
     STAGE_DONE("stage_done"),
+    POINTS_COMPLETE("points_complete"),
     GENERATION_COMPLETE("generation_complete");
 
     private final String value;

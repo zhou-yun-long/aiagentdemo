@@ -5,6 +5,7 @@ import {
   BookOpen,
   Bot,
   Camera,
+  ClipboardList,
   CheckSquare,
   Download,
   FileText,
@@ -77,8 +78,11 @@ type ToolbarProps = {
   onMoveDown: () => void;
   onAutoBalanceMap: () => void;
   onExportCases: (format: ExportFormat) => void;
+  onExportXlsx?: () => void;
   onToggleShare: () => void;
   onToggleIntegration: () => void;
+  traceViewOpen: boolean;
+  onToggleTraceView: () => void;
   outlineOpen: boolean;
   onToggleOutline: () => void;
   dirty: boolean;
@@ -140,8 +144,11 @@ export function Toolbar({
   onMoveDown,
   onAutoBalanceMap,
   onExportCases,
+  onExportXlsx,
   onToggleShare,
   onToggleIntegration,
+  traceViewOpen,
+  onToggleTraceView,
   outlineOpen,
   onToggleOutline,
   dirty,
@@ -491,6 +498,12 @@ export function Toolbar({
                   <FileType size={14} />
                   Markdown
                 </button>
+                {onExportXlsx && (
+                  <button onClick={() => { setExportOpen(false); onExportXlsx(); }}>
+                    <FileSpreadsheet size={14} />
+                    Excel
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -498,6 +511,14 @@ export function Toolbar({
           <button className="ghost" onClick={onToggleShare}>
             <Share2 size={15} />
             用例分享
+          </button>
+          <button className={`ghost ${traceViewOpen ? 'active' : ''}`} onClick={onToggleTraceView}>
+            <GitBranch size={15} />
+            追踪视图
+          </button>
+          <button className="ghost" onClick={() => navigate(`/cases?projectId=${currentProjectId}`)}>
+            <ClipboardList size={15} />
+            用例管理
           </button>
           <button className="icon" onClick={onToggleTheme} aria-label="切换主题">
             {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}

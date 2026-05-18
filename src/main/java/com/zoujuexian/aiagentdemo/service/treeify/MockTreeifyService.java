@@ -1,6 +1,7 @@
 package com.zoujuexian.aiagentdemo.service.treeify;
 
 import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName.GENERATION_COMPLETE;
+import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName.POINTS_COMPLETE;
 import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName.STAGE_DONE;
 import static com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventName.STAGE_STARTED;
 
@@ -8,6 +9,7 @@ import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.BatchConfirmCasesRe
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CaseStatsDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ConfirmGenerateTaskRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CreateGenerateTaskRequest;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateHistoryDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateTaskDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.MindmapNodeDto;
@@ -16,6 +18,7 @@ import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.SaveMindmapRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseRequest;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TraceGraphDto;
 import com.alibaba.fastjson.JSON;
 import org.springframework.stereotype.Service;
 
@@ -59,6 +62,18 @@ public class MockTreeifyService {
         return persistence.archiveProject(projectId);
     }
 
+    public ProjectDto restoreProject(Long projectId) {
+        return persistence.restoreProject(projectId);
+    }
+
+    public TraceGraphDto getTraceability(Long projectId) {
+        return persistence.getTraceability(projectId);
+    }
+
+    public TraceGraphDto saveTraceability(Long projectId, TraceGraphDto request) {
+        return persistence.saveTraceability(projectId, request);
+    }
+
     // ──── TestCase CRUD ────
 
     public List<TestCaseDto> listCases(Long projectId) {
@@ -89,6 +104,10 @@ public class MockTreeifyService {
         return persistence.getCaseStats(projectId);
     }
 
+    public Map<Long, CaseStatsDto> getAllProjectStats() {
+        return persistence.getAllProjectStats();
+    }
+
     public List<MindmapNodeDto> getMindmap(Long projectId) {
         return persistence.getMindmap(projectId);
     }
@@ -105,6 +124,10 @@ public class MockTreeifyService {
 
     public GenerateTaskDto getTask(String taskId) {
         return persistence.getTask(taskId);
+    }
+
+    public List<GenerateHistoryDto> listGenerateTasks(Long projectId) {
+        return persistence.listGenerateTasks(projectId);
     }
 
     public String getTaskInput(String taskId) {
@@ -149,6 +172,9 @@ public class MockTreeifyService {
             case GENERATION_COMPLETE -> {
                 int score = extractCriticScore(event, current.criticScore());
                 yield updateTask(current, "done", null, score, LocalDateTime.now());
+            }
+            case POINTS_COMPLETE -> {
+                yield updateTask(current, "done", null, current.criticScore(), LocalDateTime.now());
             }
             default -> current;
         };

@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 
@@ -25,6 +26,10 @@ public class TreeifyProject {
     @Column(nullable = false, length = 32)
     private String status;
 
+    @Lob
+    @Column
+    private String traceabilityJson;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -44,6 +49,9 @@ public class TreeifyProject {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getTraceabilityJson() { return traceabilityJson; }
+    public void setTraceabilityJson(String traceabilityJson) { this.traceabilityJson = traceabilityJson; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

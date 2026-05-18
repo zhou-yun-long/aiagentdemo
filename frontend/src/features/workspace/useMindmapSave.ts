@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { getTreeifyApiMode, saveMindmap } from '../../shared/api/treeify';
+import { saveMindmap } from '../../shared/api/treeify';
 import { mindNodeToDto } from '../../shared/transforms/treeifyTransforms';
 import { useWorkspaceStore } from './workspaceStore';
 
@@ -27,23 +27,13 @@ export function useMindmapSave() {
     setSaveResult(null);
 
     try {
-      const apiMode = getTreeifyApiMode();
-
-      if (apiMode === 'mock') {
-        markClean();
-        showResult({ type: 'success', message: '已保存' });
-        return;
-      }
-
-      try {
-        const dtos = nodes.map(mindNodeToDto);
-        await saveMindmap(currentProjectId, dtos);
-        markClean();
-        showResult({ type: 'success', message: '已保存' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : '保存失败';
-        showResult({ type: 'error', message });
-      }
+      const dtos = nodes.map(mindNodeToDto);
+      await saveMindmap(currentProjectId, dtos);
+      markClean();
+      showResult({ type: 'success', message: '已保存' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '保存失败';
+      showResult({ type: 'error', message });
     } finally {
       setSaving(false);
     }
