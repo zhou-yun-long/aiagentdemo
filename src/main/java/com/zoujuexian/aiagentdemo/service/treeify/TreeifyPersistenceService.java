@@ -30,6 +30,9 @@ import com.zoujuexian.aiagentdemo.domain.repository.TreeifyMindmapNodeRepository
 import com.zoujuexian.aiagentdemo.domain.repository.TreeifyProjectRepository;
 import com.zoujuexian.aiagentdemo.domain.repository.TreeifyTestCaseRepository;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 
@@ -45,6 +48,8 @@ import java.util.UUID;
 @Service
 public class TreeifyPersistenceService {
 
+    private static final Logger log = LoggerFactory.getLogger(TreeifyPersistenceService.class);
+
     private static final Set<String> PRIORITIES = Set.of("P0", "P1", "P2", "P3");
     private static final Set<String> EXECUTION_STATUSES = Set.of(
             "not_run", "running", "passed", "failed", "blocked", "skipped"
@@ -58,6 +63,9 @@ public class TreeifyPersistenceService {
     private final TreeifyMindmapNodeRepository mindmapRepo;
     private final TreeifyGenerationEventRepository eventRepo;
     private final ObjectMapper objectMapper;
+
+    @Autowired(required = false)
+    private VectorEmbeddingService vectorEmbeddingService;
 
     public TreeifyPersistenceService(
             TreeifyProjectRepository projectRepo,
@@ -238,6 +246,7 @@ public class TreeifyPersistenceService {
     public void deleteCase(Long caseId) {
         TreeifyTestCase entity = findCase(caseId);
         caseRepo.delete(entity);
+        deleteTestCaseVectorsSafe(caseId);
     }
 
     public TestCaseDto updateExecutionStatus(Long caseId, String executionStatus) {
@@ -273,7 +282,9 @@ public class TreeifyPersistenceService {
                     Map.of("collapsed", false),
                     null
             );
-            savedCases.add(createCase(request.projectId(), caseRequest));
+            TestCaseDto saved = createCase(request.projectId(), caseRequest);
+            savedCases.add(saved);
+            embedTestCaseSafe(saved);
         }
         return savedCases;
     }
@@ -882,6 +893,52 @@ public class TreeifyPersistenceService {
 
     public List<TreeifyGenerationEvent> replayEvents(String taskId) {
         return eventRepo.findAllByTaskIdOrderBySequenceAsc(taskId);
+    }
+
+    // ──── Vector embedding helpers ────
+
+    private void embedTestCaseSafe(TestCaseDto testCase) {
+        if (vectorEmbeddingService == null) {
+            return;
+        }
+        try {
+            String content = buildTestCaseContent(testCase);
+            vectorEmbeddingService.embedTestCase(testCase.projectId(), testCase.id(), content, testCase.title());
+        } catch (Exception e) {
+            log.warn("Failed to embed test case id={}, skipping vector store: {}", testCase.id(), e.getMessage());
+        }
+    }
+
+    private void deleteTestCaseVectorsSafe(Long caseId) {
+        if (vectorEmbeddingService == null) {
+            return;
+        }
+        try {
+            vectorEmbeddingService.deleteByTestCaseId(caseId);
+        } catch (Exception e) {
+            log.warn("Failed to delete vectors for test case id={}: {}", caseId, e.getMessage());
+        }
+    }
+
+    private String buildTestCaseContent(TestCaseDto testCase) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("标题：").append(defaultText(testCase.title(), ""));
+        String precondition = testCase.precondition();
+        if (precondition != null && !precondition.isBlank()) {
+            sb.append("\n前置条件：").append(precondition);
+        }
+        List<String> steps = testCase.steps();
+        if (steps != null && !steps.isEmpty()) {
+            sb.append("\n执行步骤：");
+            for (int i = 0; i < steps.size(); i++) {
+                sb.append("\n  ").append(i + 1).append(". ").append(defaultText(steps.get(i), ""));
+            }
+        }
+        String expected = testCase.expected();
+        if (expected != null && !expected.isBlank()) {
+            sb.append("\n预期结果：").append(expected);
+        }
+        return sb.toString();
     }
 
     // ──── Validation helpers ────

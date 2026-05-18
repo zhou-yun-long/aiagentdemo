@@ -58,6 +58,48 @@ public class VectorEmbeddingService {
     }
 
     /**
+     * Splits test case content into chunks and stores them as vector embeddings
+     * with type metadata set to "test_case" for cross-project reference.
+     */
+    public void embedTestCase(Long projectId, Long testCaseId, String content, String title) {
+        if (vectorStore == null) {
+            return;
+        }
+        if (content == null || content.isBlank()) {
+            return;
+        }
+
+        List<String> chunks = chunkContent(content);
+        List<Document> documents = new ArrayList<>();
+        for (int i = 0; i < chunks.size(); i++) {
+            Map<String, Object> metadata = Map.of(
+                    "projectId", projectId,
+                    "testCaseId", testCaseId,
+                    "title", title != null ? title : "",
+                    "chunkIndex", i,
+                    "type", "test_case"
+            );
+            documents.add(new Document(chunks.get(i), metadata));
+        }
+
+        log.info("Storing {} embedding chunks for testCaseId={}, projectId={}", documents.size(), testCaseId, projectId);
+        vectorStore.add(documents);
+    }
+
+    /**
+     * Deletes all vector embeddings associated with the given test case.
+     */
+    public void deleteByTestCaseId(Long testCaseId) {
+        if (vectorStore == null) {
+            return;
+        }
+
+        log.info("Deleting embedding vectors for testCaseId={}", testCaseId);
+        Filter.Expression expr = new FilterExpressionBuilder().eq("testCaseId", testCaseId).build();
+        vectorStore.delete(expr);
+    }
+
+    /**
      * Deletes all vector embeddings associated with the given knowledge document.
      */
     public void deleteByKnowledgeId(Long knowledgeId) {
