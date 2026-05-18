@@ -35,6 +35,10 @@ public class ReportPdfService {
     public byte[] exportReportPdf(Long reportId) {
         TestReportDto report = reportService.getReport(reportId);
         ReportSummaryDto summary = reportService.getReportSummary(reportId);
+        if (summary == null) {
+            throw new BusinessException(ApiErrorCode.INTERNAL_ERROR,
+                    "无法计算报告摘要，reportId=" + reportId);
+        }
         List<FailedCaseDto> failedCases = reportService.getFailedCases(reportId);
 
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {

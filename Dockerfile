@@ -6,7 +6,7 @@ COPY pom.xml ./
 COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 mvn -B -DskipTests package
 
-FROM docker.m.daocloud.io/library/eclipse-temurin:21-jre-alpine AS runtime
+FROM docker.m.daocloud.io/library/eclipse-temurin:21-jre AS runtime
 
 WORKDIR /app
 
@@ -14,4 +14,4 @@ COPY --from=builder /app/target/*.jar app.jar
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-Djava.net.preferIPv4Stack=true", "-jar", "app.jar"]

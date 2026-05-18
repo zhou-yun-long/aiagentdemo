@@ -11,6 +11,11 @@ services:
       RAG_ENABLED: ${RAG_ENABLED:-false}
     volumes:
       - treeify-data:/app/data
+    # Use public DNS servers to avoid Alpine DNS resolution issues in bridge mode
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+      - 223.5.5.5
     restart: unless-stopped
 
   frontend:

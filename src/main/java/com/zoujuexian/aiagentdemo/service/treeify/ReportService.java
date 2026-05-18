@@ -80,7 +80,12 @@ public class ReportService {
 
     public ReportSummaryDto getReportSummary(Long reportId) {
         TreeifyTestReport report = findReport(reportId);
-        return JSON.parseObject(report.getSummaryJson(), ReportSummaryDto.class);
+        ReportSummaryDto summary = JSON.parseObject(report.getSummaryJson(), ReportSummaryDto.class);
+        if (summary == null) {
+            // Fallback: compute summary on-the-fly if stored JSON is missing or invalid
+            summary = buildSummary(report.getPlanId());
+        }
+        return summary;
     }
 
     public List<FailedCaseDto> getFailedCases(Long reportId) {
