@@ -19,10 +19,11 @@ import java.io.IOException;
 
 /**
  * CI/CD authentication filter. Registered via {@link CiFilterConfig} for
- * {@code /api/v1/ci/*} paths only. Not annotated with {@code @Component}
- * to avoid double-registration from both component scanning and the
- * {@code FilterRegistrationBean}.
+ * {@code /api/v1/ci/*} paths only. The {@code FilterRegistrationBean}
+ * in {@link CiFilterConfig} controls URL mapping and ordering, so
+ * component-scanning alone won't register it as a servlet filter.
  */
+@Component
 public class CiAuthFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(CiAuthFilter.class);
