@@ -32,8 +32,8 @@ function download(content: string, filename: string, mime: string) {
 }
 
 function exportJson(cases: ExportCase[], date: string) {
-  const content = JSON.stringify({ product: 'speccase', exportedAt: new Date().toISOString(), cases }, null, 2);
-  download(content, `speccase-cases-${date}.json`, 'application/json');
+  const content = JSON.stringify({ product: '测试平台', exportedAt: new Date().toISOString(), cases }, null, 2);
+  download(content, `testing-platform-cases-${date}.json`, 'application/json');
 }
 
 function escapeCsv(value: string): string {
@@ -58,12 +58,12 @@ function exportCsv(cases: ExportCase[], date: string) {
   ].map(escapeCsv).join(','));
 
   const content = '\uFEFF' + [headers.join(','), ...rows].join('\n');
-  download(content, `speccase-cases-${date}.csv`, 'text/csv');
+  download(content, `testing-platform-cases-${date}.csv`, 'text/csv');
 }
 
 function exportMarkdown(cases: ExportCase[], date: string) {
   const lines = [
-    '# SpecCase 用例导出',
+    '# 测试平台 用例导出',
     '',
     `> 导出时间：${new Date().toLocaleString('zh-CN')}`,
     `> 用例总数：${cases.length}`,
@@ -99,7 +99,7 @@ function exportMarkdown(cases: ExportCase[], date: string) {
     lines.push('');
   });
 
-  download(lines.join('\n'), `speccase-cases-${date}.md`, 'text/markdown');
+  download(lines.join('\n'), `testing-platform-cases-${date}.md`, 'text/markdown');
 }
 
 export function exportCases(cases: ExportCase[], format: ExportFormat) {
@@ -112,4 +112,19 @@ export function exportCases(cases: ExportCase[], format: ExportFormat) {
     case 'markdown':
       return exportMarkdown(cases, date);
   }
+}
+
+export async function exportXlsx(projectId: number, _caseIds?: number[]): Promise<void> {
+  const url = `/api/v1/projects/${projectId}/export/excel`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`导出失败: ${response.status} ${response.statusText}`);
+  }
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = `testing-platform-cases-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  link.click();
+  URL.revokeObjectURL(blobUrl);
 }

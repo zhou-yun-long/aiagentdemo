@@ -1,56 +1,203 @@
-# **快速开始**
+# 测试平台
 
-本项目是一个基于Spring AI的AI Agent应用（**纯Demo，仅学习用途**），集成了 RAG 检索增强生成、Function Calling 工具调用、MCP 协议、SubAgent 子代理、Skill 技能系统等核心能力。本文将从六个核心模块出发，深入剖析其架构设计和实现细节。
+基于 Spring Boot + React 的测试管理平台，集成了 AI 辅助用例生成、测试计划管理、测试报告生成和 Dashboard 数据看板。后端基于 Spring AI 构建，保留了 RAG、Function Calling、MCP 等 AI Agent 能力。
 
-## **环境要求**
+## 环境要求
 
 - Java 21+
 - Maven 3.9+
+- Node.js 18+（前端开发）
 
-## **核心模块**
+## 核心模块
 
-| **模块**                     | **说明**                                                     |
-| ---------------------------- | ------------------------------------------------------------ |
-| **AgentCore**                | 核心编排器，具备意图识别、记忆管理与大模型调用等能力。       |
-| **ChatMemory**               | 对话记忆管理，支持三层上下文压缩（摘要压缩 → Assistant 裁剪 → 滑动窗口）。 |
-| **Tool（Function Calling）** | 可插拔的工具注册机制，通过 `InnerTool` 统一接口注册，LLM 自主决策调用 |
-| **RAG**                      | 完整的检索增强生成流水线：文档加载 → 文档分块 → 向量化 → 向量存储 → 多路召回（语义 + BM25 + 查询改写）→ RRF 融合 → Rerank 重排 → LLM → 内容生成 |
-| **Command & Skill**          | 两种 Markdown 驱动的 Prompt 模板机制：Command 由用户主动调用，Skill 本质作为Tool由 LLM 决策调用。 |
-| **SubAgent**                 | 拥有独立记忆的子代理，支持内部 SubAgent 和外部 IdeaLab Agent 两种形态 |
-| **MCP**                      | 双向 MCP 支持：作为 Client 动态连接外部 MCP 服务，作为 Server 对外暴露服务 |
+| 模块 | 说明 |
+| --- | --- |
+| **用例管理** | 项目的创建与管理、测试用例的增删改查、思维导图视图、执行状态跟踪、用例导出（Excel） |
+| **用例生成（功能/接口）** | AI 驱动的多阶段用例生成（E1 需求分析 → E2 场景设计 → E3 用例编写 → Critic 质量评审），SSE 实时推送进度 |
+| **测试计划** | 创建测试计划、关联用例、记录执行结果、自动重算计划状态 |
+| **测试报告** | 基于测试计划生成报告、查看汇总统计与失败用例列表、导出 PDF / Excel |
+| **Dashboard** | 项目维度的数据看板，聚合用例统计、计划进度、报告概览 |
+| **AI Agent** | 保留原有 AgentCore、RAG、Tool、SubAgent、MCP 等能力（详见下方文档） |
 
-## **配置**
+## API 端点总览
 
-编辑 `src/main/resources/application.properties`，配置大模型 API
+所有端点均使用统一响应格式 `{ code, data, message, requestId }`，成功时 `code` 为 `0`。
 
+### 项目管理 `/api/v1/projects`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/v1/projects` | 项目列表 |
+| POST | `/api/v1/projects` | 创建项目 |
+| GET | `/api/v1/projects/{id}` | 项目详情 |
+| PUT | `/api/v1/projects/{id}` | 更新项目 |
+| DELETE | `/api/v1/projects/{id}` | 归档项目 |
+| PATCH | `/api/v1/projects/{id}/restore` | 恢复已归档项目 |
+| GET | `/api/v1/projects/{id}/traceability` | 获取需求追溯图 |
+| PUT | `/api/v1/projects/{id}/traceability` | 保存需求追溯图 |
+
+### 用例管理 `/api/v1/projects/{id}/cases` & `/api/v1/cases`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/v1/projects/{id}/cases` | 项目用例列表 |
+| GET | `/api/v1/projects/{id}/cases/stats` | 项目用例统计 |
+| GET | `/api/v1/projects/cases/stats` | 所有项目用例统计 |
+| POST | `/api/v1/projects/{id}/cases` | 创建用例 |
+| PUT | `/api/v1/cases/{id}` | 更新用例 |
+| DELETE | `/api/v1/cases/{id}` | 删除用例 |
+| PATCH | `/api/v1/cases/{id}/execution-status` | 更新执行状态 |
+| POST | `/api/v1/cases/batch-confirm` | 批量确认 AI 生成的候选用例 |
+
+### 思维导图 `/api/v1/projects/{id}/mindmap`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/v1/projects/{id}/mindmap` | 获取思维导图节点 |
+| PUT | `/api/v1/projects/{id}/mindmap` | 保存思维导图节点 |
+
+### 用例生成 `/api/v1/projects/{id}/generate` & `/api/v1/generate`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/v1/projects/{id}/generate` | 创建生成任务 |
+| GET | `/api/v1/projects/{id}/generate/history` | 生成历史列表 |
+| GET | `/api/v1/generate/{taskId}` | 查询任务状态 |
+| GET | `/api/v1/generate/{taskId}/stream` | SSE 订阅生成过程 |
+| GET | `/api/v1/generate/{taskId}/events` | 重放任务事件（持久化记录） |
+| POST | `/api/v1/generate/{taskId}/confirm` | 确认当前阶段继续 |
+| POST | `/api/v1/generate/{taskId}/cancel` | 取消生成任务 |
+| GET | `/api/v1/generation/dimensions` | 获取生成维度配置 |
+
+### 测试计划 `/api/v1/plans`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/v1/plans` | 创建测试计划 |
+| GET | `/api/v1/projects/{id}/plans` | 项目计划列表 |
+| GET | `/api/v1/plans/{id}` | 计划详情（含关联用例） |
+| PUT | `/api/v1/plans/{id}` | 更新计划 |
+| DELETE | `/api/v1/plans/{id}` | 删除计划 |
+| PUT | `/api/v1/plans/{id}/cases/{caseId}/result` | 更新计划中用例的执行结果 |
+| POST | `/api/v1/plans/{id}/recompute` | 重算计划状态 |
+
+### 测试报告 `/api/v1/reports`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/v1/plans/{planId}/reports?projectId=` | 基于计划生成报告 |
+| GET | `/api/v1/projects/{id}/reports` | 项目报告列表 |
+| GET | `/api/v1/reports/{id}` | 报告详情 |
+| GET | `/api/v1/reports/{id}/summary` | 报告汇总统计 |
+| GET | `/api/v1/reports/{id}/failed-cases` | 失败用例列表 |
+| GET | `/api/v1/reports/{id}/export?format=excel\|pdf` | 导出报告 |
+
+### Dashboard `/api/v1/projects/{id}/dashboard`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/v1/projects/{id}/dashboard` | 项目数据看板 |
+
+### 附件上传 `/api/v1/projects/{id}/attachments`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/v1/projects/{id}/attachments` | 上传附件（multipart） |
+
+### 知识库 `/api/v1/projects/{id}/knowledge`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/v1/projects/{id}/knowledge` | 添加知识文档 |
+| GET | `/api/v1/projects/{id}/knowledge` | 知识文档列表 |
+| DELETE | `/api/v1/knowledge/{id}` | 删除知识文档 |
+| POST | `/api/v1/projects/{id}/knowledge/search` | 搜索知识文档 |
+
+### 项目摘要 `/api/v1/projects/{id}/summary`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/v1/projects/{id}/summary` | 当前摘要 |
+| GET | `/api/v1/projects/{id}/summary/history` | 摘要历史版本 |
+| POST | `/api/v1/projects/{id}/summary/generate` | 生成摘要 |
+| POST | `/api/v1/projects/{id}/summary/rollback/{version}` | 回滚摘要 |
+
+### 快照 `/api/v1/projects/{id}/snapshots`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/v1/projects/{id}/snapshots` | 快照列表 |
+| POST | `/api/v1/projects/{id}/snapshots` | 创建快照 |
+| GET | `/api/v1/snapshots/{id}` | 快照详情 |
+| DELETE | `/api/v1/snapshots/{id}` | 删除快照 |
+
+### 分享 `/api/v1/projects/{id}/share`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/v1/projects/{id}/share` | 创建分享链接 |
+| GET | `/api/v1/projects/{id}/share` | 获取分享信息 |
+| DELETE | `/api/v1/projects/{id}/share` | 撤销分享 |
+| GET | `/api/v1/share/{token}` | 通过 token 访问分享数据 |
+
+### 用例导出 `/api/v1/projects/{id}/export`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/v1/projects/{id}/export/excel` | 导出项目用例为 Excel |
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `JAVA_HOME` | - | Java 21 安装路径，macOS 示例：`/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home` |
+| `OPENAI_API_KEY` | - | 大模型 API 密钥，mock 模式下可设为 `test` |
+| `VITE_TREEIFY_API_MODE` | `auto` | 前端接口模式：`auto`（自动探测）、`mock`（本地 mock）、`real`（强制真实后端） |
+| `VITE_TREEIFY_PROJECT_ID` | `1` | 前端默认使用的项目 ID |
+| `RAG_ENABLED` | `true` | 是否启用 RAG 知识库检索，Docker 环境默认 `false` |
+
+## 数据库与 Flyway
+
+项目使用 H2 文件数据库，通过 Flyway 管理 schema 迁移：
+
+- 迁移脚本位置：`src/main/resources/db/migration/`
+- 启用 Flyway：`spring.flyway.enabled=true`
+- 基线迁移：`spring.flyway.baseline-on-migrate=true`，版本号从 `0` 开始
+
+新增表结构变更时，在 `db/migration/` 下按 `V{N}__{description}.sql` 命名添加迁移脚本即可。
+
+## 附件上传
+
+通过 `POST /api/v1/projects/{id}/attachments` 上传附件，支持 multipart/form-data 格式：
+
+- 单文件大小限制：50MB（`spring.servlet.multipart.max-file-size=50MB`）
+- 请求总大小限制：55MB
+- 参数 `file`：上传的文件
+- 参数 `purpose`：附件用途（默认 `requirement`）
+
+## 启动
+
+### 后端
+
+```bash
+JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./mvnw spring-boot:run
 ```
-spring.ai.openai.base-url=https://open.bigmodel.cn/api/paas/v4
-spring.ai.openai.api-key=你的API密钥
-spring.ai.openai.chat.options.model=glm-4
-spring.ai.openai.embedding.options.model=embedding-3
+
+### 前端
+
+```bash
+cd frontend && npm install && npm run dev
 ```
 
-## **启动**
+前端开发服务器运行在 `http://localhost:5173`，通过 Vite 代理将 `/api/` 请求转发到后端 `http://localhost:8080`。
 
-```
-./mvnw spring-boot:run
-```
-
-## Treeify 前后端 Docker 启动
-
-本仓库也包含 Treeify MVP 的前后端联调应用。拉取代码后可以直接用 Docker Compose 启动：
+### Docker Compose
 
 ```bash
 docker compose up -d --build
 ```
 
-启动后访问：
-
-```text
-http://localhost:5173/
-```
-
-基础验收：
+启动后访问 `http://localhost:5173/`。基础验证：
 
 ```bash
 curl -s http://localhost:5173/api/v1/projects
@@ -60,42 +207,17 @@ curl -s http://localhost:5173/api/v1/projects
 
 说明：
 
-- 前端容器监听宿主机 `5173`，后端容器监听宿主机 `8080`。
-- 前端 Nginx 会把 `/api/` 代理到后端服务，并关闭代理缓冲以支持 SSE。
-- 后端 H2 文件数据库挂载在 Docker 命名卷 `treeify-data`，容器重建后数据不会丢失。
-- 未配置真实模型密钥时，Compose 会默认注入 `OPENAI_API_KEY=test`，便于 mock API 和联调链路启动。
-- Docker 默认设置 `RAG_ENABLED=false`，避免启动时依赖外部 embedding 服务；需要知识库检索时可改为 `true`。
+- 前端容器监听宿主机 `5173`，后端容器监听宿主机 `8080`
+- 前端 Nginx 会把 `/api/` 代理到后端服务，并关闭代理缓冲以支持 SSE
+- 后端 H2 文件数据库挂载在 Docker 命名卷 `treeify-data`，容器重建后数据不会丢失
+- 未配置真实模型密钥时，Compose 会默认注入 `OPENAI_API_KEY=test`
+- Docker 默认设置 `RAG_ENABLED=false`，避免启动时依赖外部 embedding 服务
 
-## **访问**
+---
 
-### **前端页面**
+## AI Agent 核心能力
 
-启动成功后，打开浏览器访问：
-
-```
-http://localhost:8080
-```
-
-项目内置了一个完整的 Web 聊天界面（`src/main/resources/static/index.html`），支持：
-
-- **流式对话**：实时逐字输出 AI 回复（SSE）
-- **Markdown 渲染**：自动渲染代码块、表格、列表等
-- **命令面板**：输入 `/` 唤起快捷命令列表
-- **会话管理**：支持清空对话历史
-
-![img](https://oss-ata.alibaba.com/article/2026/04/23d39606-5fa4-4e3a-aa6b-7603e823e42c)
-
-### **API 直接调用**
-
-```
-# 非流式对话
-curl -X POST http://localhost:8080/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "你好，介绍一下你的能力", "sessionId": "test-001"}'
-# 流式对话（SSE）
-curl -X POST http://localhost:8080/api/chat/stream \
-  -H "Content-Type: application/json" \
-```
+以下为本项目保留的 AI Agent 基础能力模块。
 
 # **一、核心编排器：AgentCore**
 

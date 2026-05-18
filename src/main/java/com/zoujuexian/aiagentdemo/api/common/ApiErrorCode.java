@@ -17,6 +17,11 @@ public enum ApiErrorCode {
     CRITIC_RETRY_EXCEEDED(3002, HttpStatus.UNPROCESSABLE_ENTITY, "Critic 重试次数超限"),
     GENERATION_TIMEOUT(3003, HttpStatus.REQUEST_TIMEOUT, "生成任务超时"),
     VECTORIZATION_FAILED(4001, HttpStatus.INTERNAL_SERVER_ERROR, "向量化入库失败"),
+    ATTACHMENT_TOO_LARGE(1001, HttpStatus.PAYLOAD_TOO_LARGE, "单文件不能超过 50MB"),
+    ATTACHMENT_INVALID_TYPE(1001, HttpStatus.BAD_REQUEST, "附件类型不支持"),
+    EXPORT_TEMPLATE_INVALID(4002, HttpStatus.INTERNAL_SERVER_ERROR, "用例 Excel 模板缺失或损坏"),
+    EXPORT_PDF_FAILED(4003, HttpStatus.INTERNAL_SERVER_ERROR, "PDF 报告渲染失败"),
+    PLAN_INVALID_STATE(1001, HttpStatus.BAD_REQUEST, "测试计划状态非法"),
     INTERNAL_ERROR(5000, HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
 
     private final int code;

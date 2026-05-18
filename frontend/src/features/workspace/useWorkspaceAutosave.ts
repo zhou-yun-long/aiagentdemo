@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { getTreeifyApiMode, saveMindmap } from '../../shared/api/treeify';
+import { saveMindmap } from '../../shared/api/treeify';
 import { mindNodeToDto } from '../../shared/transforms/treeifyTransforms';
 import { useWorkspaceStore } from './workspaceStore';
 
@@ -16,11 +16,6 @@ export function useWorkspaceAutosave() {
     const timer = window.setTimeout(() => {
       const { nodes: latestNodes, currentProjectId: latestProjectId, markClean } = useWorkspaceStore.getState();
       if (!latestProjectId) {
-        return;
-      }
-
-      if (getTreeifyApiMode() === 'mock') {
-        markClean();
         return;
       }
 

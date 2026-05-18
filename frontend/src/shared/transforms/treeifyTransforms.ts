@@ -61,7 +61,10 @@ export function generatedCaseDtoToDraft(item: GeneratedCaseDto, index: number): 
     priority: normalizePriority(item.priority),
     tags: item.tags || ['AI'],
     source: item.source || 'ai',
-    pathType: item.pathType
+    pathType: item.pathType,
+    draftCaseId: item.draftCaseId,
+    objectIds: item.objectIds,
+    requirementIds: item.requirementIds
   };
 }
 
@@ -78,7 +81,10 @@ export function draftToGeneratedCaseDto(item: GeneratedCaseDraft): GeneratedCase
     priority: normalizePriority(item.priority),
     tags: item.tags || ['AI'],
     source: item.source || 'ai',
-    pathType: item.pathType
+    pathType: item.pathType,
+    draftCaseId: item.draftCaseId,
+    objectIds: item.objectIds,
+    requirementIds: item.requirementIds
   };
 }
 

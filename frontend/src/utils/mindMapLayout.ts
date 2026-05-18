@@ -27,7 +27,8 @@ const nodeSizes: Record<NodeKind, NodeSize> = {
   case: { width: 250, height: 84 },
   condition: { width: 360, height: 84 },
   step: { width: 360, height: 108 },
-  expected: { width: 360, height: 84 }
+  expected: { width: 360, height: 84 },
+  artifact: { width: 320, height: 148 }
 };
 
 const fallbackDepthGap = 210;
@@ -42,7 +43,8 @@ const minNodeHeights: Record<NodeKind, number> = {
   case: 84,
   condition: 84,
   step: 108,
-  expected: 84
+  expected: 84,
+  artifact: 148
 };
 
 function estimateTextHeight(node: MindNode, width: number) {
@@ -332,4 +334,120 @@ export function autoBalanceMindMap(nodes: MindNode[]): MindNode[] {
   }
 
   return balanced;
+}
+
+export function singleColumnLayout(nodes: MindNode[]): MindNode[] {
+  const root = nodes.find((node) => node.kind === 'root') || nodes.find((node) => !node.parentId);
+  if (!root) return nodes;
+
+  const laid = nodes.map((node) => ({ ...node, layout: node.layout ? { ...node.layout } : undefined }));
+  const byId = new Map(laid.map((node) => [node.id, node]));
+  const childMap = new Map<string, MindNode[]>();
+
+  for (const node of laid) {
+    if (!node.parentId || !byId.has(node.parentId) || node.id === root.id) continue;
+    if (!childMap.has(node.parentId)) childMap.set(node.parentId, []);
+    childMap.get(node.parentId)!.push(node);
+  }
+
+  for (const children of childMap.values()) {
+    children.sort(compareNodeOrder);
+  }
+
+  const heightCache = new Map<string, number>();
+
+  function getChildren(id: string) {
+    return childMap.get(id) || [];
+  }
+
+  function measureSubtree(id: string, visiting = new Set<string>()): number {
+    if (heightCache.has(id)) return heightCache.get(id)!;
+    const node = byId.get(id);
+    if (!node || visiting.has(id)) return nodeSizes.case.height;
+    visiting.add(id);
+    const ownHeight = getMindNodeSize(node).height;
+    const children = getChildren(id);
+    const childHeight = children.length
+      ? children.reduce((sum, child) => sum + measureSubtree(child.id, visiting), 0) + branchGap * (children.length - 1)
+      : 0;
+    visiting.delete(id);
+    const height = Math.max(ownHeight, childHeight);
+    heightCache.set(id, height);
+    return height;
+  }
+
+  const positioned = new Map<string, PositionedBox>();
+
+  function layoutSubtree(node: MindNode, level: number, topY: number) {
+    const children = getChildren(node.id);
+    const size = getMindNodeSize(node);
+    const subtreeHeight = measureSubtree(node.id);
+    const childTotalHeight = children.length
+      ? children.reduce((sum, child) => sum + measureSubtree(child.id), 0) + branchGap * (children.length - 1)
+      : 0;
+
+    let cursor = topY + Math.max(0, (subtreeHeight - childTotalHeight) / 2);
+    const childCenters: number[] = [];
+
+    for (const child of children) {
+      layoutSubtree(child, level + 1, cursor);
+      const childBox = positioned.get(child.id);
+      if (childBox) childCenters.push(childBox.y + childBox.height / 2);
+      cursor += measureSubtree(child.id) + branchGap;
+    }
+
+    const centerY = childCenters.length
+      ? (childCenters[0] + childCenters[childCenters.length - 1]) / 2
+      : topY + subtreeHeight / 2;
+
+    positioned.set(node.id, {
+      x: level * levelGap - size.width / 2,
+      y: centerY - size.height / 2,
+      ...size
+    });
+  }
+
+  const rootSize = getMindNodeSize(root);
+  positioned.set(root.id, { x: -rootSize.width / 2, y: -rootSize.height / 2, ...rootSize });
+
+  const rootChildren = getChildren(root.id);
+  const forestHeight = rootChildren.reduce((sum, child) => sum + measureSubtree(child.id), 0) + forestGap * (rootChildren.length - 1);
+  let cursor = -forestHeight / 2;
+  for (const child of rootChildren) {
+    layoutSubtree(child, 1, cursor);
+    cursor += measureSubtree(child.id) + forestGap;
+  }
+
+  const boxes = Array.from(positioned.values());
+  const minX = Math.min(...boxes.map((b) => b.x));
+  const minY = Math.min(...boxes.map((b) => b.y));
+  const shiftX = canvasPadding - minX;
+  const shiftY = canvasPadding - minY;
+
+  for (const node of laid) {
+    const box = positioned.get(node.id);
+    if (!box) continue;
+    node.layout = { x: Math.round(box.x + shiftX), y: Math.round(box.y + shiftY), width: box.width, height: box.height };
+  }
+
+  const rootBox = laid.find((n) => n.id === root.id)?.layout;
+  const rootCenterY = (rootBox?.y || canvasPadding) + (rootBox?.height || rootSize.height) / 2;
+  const orderedByY = laid
+    .filter((n) => n.id !== root.id)
+    .sort((a, b) => getMindNodePosition(a).y - getMindNodePosition(b).y || compareNodeOrder(a, b));
+  const nextOrder = new Map<Lane, number>(laneOrder.map((lane) => [lane, 0]));
+
+  for (const node of orderedByY) {
+    const box = getMindNodeBox(node);
+    const centerY = box.y + box.height / 2;
+    const lane: Lane = centerY < rootCenterY - 80 ? 'upper' : centerY > rootCenterY + 80 ? 'lower' : 'middle';
+    node.lane = lane;
+    node.order = nextOrder.get(lane)!;
+    nextOrder.set(lane, node.order + 1);
+  }
+
+  const balancedRoot = laid.find((n) => n.id === root.id);
+  if (balancedRoot) { balancedRoot.lane = 'middle'; balancedRoot.depth = 0; balancedRoot.order = 0; }
+
+  return laid;
 }

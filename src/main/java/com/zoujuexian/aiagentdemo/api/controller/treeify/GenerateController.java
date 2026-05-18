@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.zoujuexian.aiagentdemo.api.common.ApiResponse;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ConfirmGenerateTaskRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CreateGenerateTaskRequest;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateHistoryDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateTaskDto;
 import com.zoujuexian.aiagentdemo.domain.entity.TreeifyGenerationEvent;
@@ -50,6 +51,11 @@ public class GenerateController {
                 .body(ApiResponse.ok(treeifyService.createGenerateTask(projectId, request)));
     }
 
+    @GetMapping("/projects/{projectId}/generate/history")
+    public ApiResponse<List<GenerateHistoryDto>> getGenerateHistory(@PathVariable Long projectId) {
+        return ApiResponse.ok(treeifyService.listGenerateTasks(projectId));
+    }
+
     @GetMapping("/generate/{taskId}")
     public ApiResponse<GenerateTaskDto> getGenerateTask(@PathVariable String taskId) {
         return ApiResponse.ok(treeifyService.getTask(taskId));
@@ -61,7 +67,8 @@ public class GenerateController {
         String input = treeifyService.getTaskInput(taskId);
         return generationService.streamEvents(
                         taskId, task.mode(), input, task.currentStage(),
-                        task.e1Result(), task.e2Result(), task.feedback(), task.projectId())
+                        task.e1Result(), task.e2Result(), task.feedback(),
+                        task.projectId(), task.generationConfig())
                 .delayElements(Duration.ofMillis(350))
                 .doOnNext(event -> {
                     persistence.persistEvent(taskId, event.event().name(), event.stage(),

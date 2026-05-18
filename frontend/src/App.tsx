@@ -9,14 +9,21 @@ import { SharePanel } from './components/SharePanel';
 import { SnapshotPanel } from './components/SnapshotPanel';
 import { SummaryPanel } from './components/SummaryPanel';
 import { Toolbar } from './components/Toolbar';
+import { TraceabilityView } from './components/TraceabilityView';
 import { getDescendantIds, getWorkspaceStats, useWorkspaceStore } from './features/workspace/workspaceStore';
-import { getDefaultProjectId } from './shared/api/treeify';
-import { exportCases, type ExportCase, type ExportFormat } from './utils/exportCases';
+import { useGenerationStore } from './features/generation/generationStore';
+import { getDefaultProjectId, getTraceability } from './shared/api/treeify';
+import { exportCases, exportXlsx, type ExportCase, type ExportFormat } from './utils/exportCases';
 import { useCasePersistence } from './features/workspace/useCasePersistence';
 import { useMindmapSave } from './features/workspace/useMindmapSave';
 import { useProjectLoader } from './features/workspace/useProjectLoader';
 import { useWorkspaceAutosave } from './features/workspace/useWorkspaceAutosave';
+import type { GenerateStage } from './types/generation';
 import type { MindNode, NodeKind } from './shared/types/workspace';
+import { formatArtifactCanvasTitle } from './utils/stageArtifactFormat';
+import { buildTraceGraphFromArtifacts } from './utils/traceGraph';
+import { getMindNodePosition, getMindNodeSize } from './utils/mindMapLayout';
+import type { TraceGraphDto } from './shared/types/treeify';
 
 function buildCaseExport(nodes: MindNode[]) {
   return nodes
@@ -83,6 +90,7 @@ export default function App() {
   const setZoom = useWorkspaceStore((state) => state.setZoom);
   const fitZoom = useWorkspaceStore((state) => state.fitZoom);
   const autoBalanceMap = useWorkspaceStore((state) => state.autoBalanceMap);
+  const singleColumnMap = useWorkspaceStore((state) => state.singleColumnMap);
   const clearCanvas = useWorkspaceStore((state) => state.clearCanvas);
   const dirty = useWorkspaceStore((state) => state.dirty);
   const currentProjectId = useWorkspaceStore((state) => state.currentProjectId);
@@ -95,6 +103,11 @@ export default function App() {
   const redo = useWorkspaceStore((state) => state.redo);
 
   const [shareOpen, setShareOpen] = useState(false);
+  const [traceViewOpen, setTraceViewOpen] = useState(false);
+  const [persistedTraceGraph, setPersistedTraceGraph] = useState<TraceGraphDto | null>(null);
+  const [canvasLayoutMode, setCanvasLayoutMode] = useState<'double' | 'single'>(() => {
+    return (localStorage.getItem('canvas-layout-mode') as 'double' | 'single') || 'double';
+  });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -129,13 +142,124 @@ export default function App() {
         counts[node.kind] += 1;
         return counts;
       },
-      { root: 0, group: 0, case: 0, condition: 0, step: 0, expected: 0 }
+      { root: 0, group: 0, case: 0, condition: 0, step: 0, expected: 0, artifact: 0 }
     );
   }, [nodes]);
+
+  const artifacts = useGenerationStore((state) => state.artifacts);
+  const generatedCases = useGenerationStore((state) => state.cases);
+  const generationTaskId = useGenerationStore((state) => state.taskId);
+  const previewTraceGraph = useGenerationStore((state) => state.traceGraph);
+  const setPreviewTraceGraph = useGenerationStore((state) => state.setTraceGraph);
+  const activeTraceGraph = previewTraceGraph || persistedTraceGraph;
+
+  useEffect(() => {
+    if (previewTraceGraph?.nodes.length || generatedCases.length === 0) {
+      return;
+    }
+    const graph = buildTraceGraphFromArtifacts(
+      currentProjectId ?? getDefaultProjectId(),
+      generationTaskId,
+      artifacts,
+      generatedCases
+    );
+    if (graph) {
+      setPreviewTraceGraph(graph);
+    }
+  }, [artifacts, currentProjectId, generatedCases, generationTaskId, previewTraceGraph?.nodes.length, setPreviewTraceGraph]);
+
+  useEffect(() => {
+    if (previewTraceGraph?.nodes.length) {
+      setTraceViewOpen(true);
+    }
+  }, [previewTraceGraph?.updatedAt, previewTraceGraph?.nodes.length]);
+
+  useEffect(() => {
+    const projectId = currentProjectId ?? getDefaultProjectId();
+    let cancelled = false;
+    getTraceability(projectId)
+      .then((graph) => {
+        if (!cancelled) setPersistedTraceGraph(graph);
+      })
+      .catch(() => {
+        if (!cancelled) setPersistedTraceGraph(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentProjectId]);
+
+  const canvasNodes = useMemo(() => {
+    const artifactNodes: MindNode[] = [];
+    const root = nodes.find((n) => n.kind === 'root');
+    if (!root) return nodes;
+    const anchor = nodes.find((n) => n.id === selectedId) || root;
+    const anchorPosition = getMindNodePosition(anchor);
+    const anchorSize = getMindNodeSize(anchor);
+    const artifactX = anchorPosition.x;
+    const firstArtifactY = Math.max(96, anchorPosition.y - anchorSize.height - 220);
+    const artifactGap = 152;
+
+    for (const [stage, artifact] of Object.entries(artifacts)) {
+      if (!artifact?.visibleOnCanvas) continue;
+      const artifactStage = stage as GenerateStage;
+      const id = `artifact-${stage}`;
+      const existing = nodes.find((n) => n.id === id);
+      if (existing) continue;
+      const index = artifactNodes.length;
+      artifactNodes.push({
+        id,
+        parentId: root.id,
+        title: formatArtifactCanvasTitle(artifactStage, artifact),
+        kind: 'artifact',
+        lane: 'upper',
+        depth: 1,
+        order: index,
+        ai: true,
+        tags: ['阶段生成物'],
+        layout: {
+          x: artifactX,
+          y: firstArtifactY + index * artifactGap,
+          width: 320,
+          height: 120
+        }
+      });
+    }
+
+    if (artifactNodes.length === 0) return nodes;
+
+    const artifactIds = new Set(artifactNodes.map((n) => n.id));
+    const filtered = nodes.filter((n) => !artifactIds.has(n.id));
+    return [...filtered, ...artifactNodes];
+  }, [nodes, artifacts, selectedId]);
 
   const handleExportCases = (format: ExportFormat) => {
     const cases: ExportCase[] = buildCaseExport(nodes);
     exportCases(cases, format);
+  };
+
+  const handleExportXlsx = () => {
+    const projectId = currentProjectId ?? getDefaultProjectId();
+    exportXlsx(projectId).catch((err) => {
+      alert(err instanceof Error ? err.message : '导出 Excel 失败');
+    });
+  };
+
+  const handleToggleLayoutMode = () => {
+    setCanvasLayoutMode((prev) => {
+      const next = prev === 'double' ? 'single' : 'double';
+      localStorage.setItem('canvas-layout-mode', next);
+      if (next === 'single') singleColumnMap(); else autoBalanceMap();
+      return next;
+    });
+  };
+
+  const handleSelectTraceCase = (caseId: number) => {
+    const node = nodes.find((item) => item.kind === 'case' && item.caseId === String(caseId));
+    if (node) {
+      selectNode(node.id);
+      setTraceViewOpen(false);
+    }
   };
 
   const handleSnapshotRestore = (restoredNodes: MindNode[]) => {
@@ -190,8 +314,11 @@ export default function App() {
         onMoveDown={() => moveSelectedNode('down')}
         onAutoBalanceMap={autoBalanceMap}
         onExportCases={handleExportCases}
+        onExportXlsx={handleExportXlsx}
         onToggleShare={() => setShareOpen((v) => !v)}
         onToggleIntegration={toggleIntegration}
+        traceViewOpen={traceViewOpen}
+        onToggleTraceView={() => setTraceViewOpen((v) => !v)}
         dirty={dirty}
         saving={saving}
         saveResult={saveResult}
@@ -228,24 +355,58 @@ export default function App() {
               {pageStatus === 'error' && pageError && (
                 <div className="page-status error-banner">{pageError}</div>
               )}
-              <MindMapCanvas
-                nodes={nodes}
-                selectedId={selectedId}
-                zoom={zoom}
-                layoutVersion={layoutVersion}
-                onSelect={selectNode}
-                onToggleCollapse={toggleCollapse}
-                onZoomIn={() => setZoom(zoom + 0.1)}
-                onZoomOut={() => setZoom(zoom - 0.1)}
-                onFit={fitZoom}
-                setZoom={setZoom}
-              />
-              <SelectionBar
-                node={selectedNode}
-                lastSnapshotAt={lastSnapshotAt}
-                readOnly={readOnly}
-                onUpdate={updateNode}
-              />
+              {traceViewOpen ? (
+                <TraceabilityView graph={activeTraceGraph} onSelectCase={handleSelectTraceCase} />
+              ) : (
+                <>
+                  <div className="canvas-layout-toggle">
+                    <button
+                      className={canvasLayoutMode === 'double' ? 'active' : ''}
+                      onClick={handleToggleLayoutMode}
+                      title="双列布局"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <rect x="1" y="5" width="5" height="6" rx="1" />
+                        <rect x="10" y="2" width="5" height="5" rx="1" />
+                        <rect x="10" y="9" width="5" height="5" rx="1" />
+                        <path d="M6 8h4M6 8l4-3M6 8l4 3" />
+                      </svg>
+                      双列
+                    </button>
+                    <button
+                      className={canvasLayoutMode === 'single' ? 'active' : ''}
+                      onClick={handleToggleLayoutMode}
+                      title="单列布局"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <rect x="1" y="5.5" width="5" height="5" rx="1" />
+                        <rect x="9" y="1" width="6" height="4" rx="1" />
+                        <rect x="9" y="11" width="6" height="4" rx="1" />
+                        <path d="M6 8h3M6 8l3-4.5M6 8l3 4.5" />
+                      </svg>
+                      单列
+                    </button>
+                  </div>
+                  <MindMapCanvas
+                    nodes={canvasNodes}
+                    selectedId={selectedId}
+                    zoom={zoom}
+                    layoutVersion={layoutVersion}
+                    onSelect={selectNode}
+                    onToggleCollapse={toggleCollapse}
+                    onZoomIn={() => setZoom(zoom + 0.1)}
+                    onZoomOut={() => setZoom(zoom - 0.1)}
+                    onFit={fitZoom}
+                    setZoom={setZoom}
+                  />
+                  <SelectionBar
+                    node={selectedNode}
+                    lastSnapshotAt={lastSnapshotAt}
+                    readOnly={readOnly}
+                    onUpdate={updateNode}
+                  />
+                </>
+              )}
             </>
           )}
         </section>

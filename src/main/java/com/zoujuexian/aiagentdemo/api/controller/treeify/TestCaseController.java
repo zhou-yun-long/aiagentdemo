@@ -34,6 +34,11 @@ public class TestCaseController {
         this.treeifyService = treeifyService;
     }
 
+    @GetMapping("/projects/cases/stats")
+    public ApiResponse<Map<Long, CaseStatsDto>> getAllProjectStats() {
+        return ApiResponse.ok(treeifyService.getAllProjectStats());
+    }
+
     @GetMapping("/projects/{projectId}/cases")
     public ApiResponse<List<TestCaseDto>> listCases(@PathVariable Long projectId) {
         return ApiResponse.ok(treeifyService.listCases(projectId));

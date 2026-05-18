@@ -29,6 +29,15 @@ import java.util.Map;
 public class AiTreeifyGenerationService implements TreeifyGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(AiTreeifyGenerationService.class);
+    private static final String TRACE_ID_CONTRACT = """
+            追踪链路硬约束：
+            - ID 字段必须使用英文小驼峰字段名，不能改成中文字段或其他别名。
+            - requirementId 必须以 req- 开头；objectId 必须以 obj- 开头；draftCaseId 必须以 case- 开头；全部使用小写英文、数字和短横线。
+            - 下游只能引用上游已经输出过的 ID；禁止引用不存在的 requirementId/objectId。
+            - requirementIds、objectIds 必须始终是字符串数组；只有一个关联也必须写数组，例如 ["req-login-main"]。
+            - 如果某项暂时无法关联，保留空数组 []，不要省略字段，不要写 null，不要把说明文字塞进 ID 字段。
+            - 输出必须是可被 JSON.parse 直接解析的合法 JSON；不要 Markdown，不要注释，不要尾随逗号。
+            """;
 
     private final ChatClient chatClient;
     private final MockGenerationService fallback;
@@ -184,15 +193,33 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
 
     private String e1Prompt(String input) {
         return """
-                你是一个专业的测试分析师。请根据以下需求，提取业务目标、用户动作、系统行为和约束条件。
+                你是一个专业的测试分析师。请根据以下需求，提取可被后续阶段追踪引用的需求分析点。
 
                 需求：""" + input + """
 
-                请以 JSON 格式返回，包含以下字段：
-                - businessGoals: 业务目标列表
-                - userActions: 用户动作列表
-                - systemBehaviors: 系统行为列表
-                - constraints: 约束条件列表
+                """ + TRACE_ID_CONTRACT + """
+
+                请只返回一个 JSON 对象，字段必须为：
+                {
+                  "businessGoals": ["业务目标"],
+                  "requirements": [
+                    {
+                      "requirementId": "req-短横线稳定标识",
+                      "title": "需求分析点标题",
+                      "summary": "一句话摘要",
+                      "type": "flow|rule|risk|data"
+                    }
+                  ],
+                  "actors": ["用户角色或外部系统"],
+                  "modules": ["功能模块"],
+                  "userActions": ["用户可执行动作"],
+                  "systemBehaviors": ["系统响应、状态变化或异步行为"],
+                  "dataObjects": ["关键数据对象、字段或状态"],
+                  "constraints": ["约束条件"],
+                  "risks": ["测试风险或容易遗漏的点"],
+                  "acceptanceCriteria": ["可验收标准"],
+                  "openQuestions": ["待澄清问题"]
+                }
 
                 只返回 JSON，不要添加其他文字。
                 """;
@@ -206,13 +233,27 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
 
                 E1 分析结果：""" + e1Result.toJSONString() + """
 
-                请以 JSON 数组格式返回可测试对象列表，每个对象包含：
-                - name: 可测试对象名称
-                - type: 类型(ui/function/flow/data)
-                - dimensions: 测试维度列表
-                - priority: 优先级(P0/P1/P2)
+                """ + TRACE_ID_CONTRACT + """
 
-                只返回 JSON 数组，不要添加其他文字。
+                请只返回一个 JSON 对象，字段必须为：
+                {
+                  "objects": [
+                    {
+                      "objectId": "obj-短横线稳定标识",
+                      "name": "可测试对象名称",
+                      "requirementIds": ["只能引用 E1 requirements 中存在的 requirementId"],
+                      "type": "ui|function|flow|data",
+                      "priority": "P0|P1|P2",
+                      "riskLevel": "high|medium|low",
+                      "dimensions": ["具体测试维度"],
+                      "coveredRequirements": ["关联的业务目标、用户动作或验收标准"],
+                      "negativeScenarios": ["需要重点覆盖的异常或边界场景"],
+                      "reason": "为什么需要覆盖该对象"
+                    }
+                  ]
+                }
+
+                每个对象至少关联一个 requirementId。只返回 JSON，不要添加其他文字。
                 """;
     }
 
@@ -222,13 +263,27 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
 
                 需求：""" + input + """
 
-                请以 JSON 数组格式返回可测试对象列表，每个对象包含：
-                - name: 可测试对象名称
-                - type: 类型(ui/function/flow/data)
-                - dimensions: 测试维度列表
-                - priority: 优先级(P0/P1/P2)
+                """ + TRACE_ID_CONTRACT + """
 
-                只返回 JSON 数组，不要添加其他文字。
+                请只返回一个 JSON 对象，字段必须为：
+                {
+                  "objects": [
+                    {
+                      "objectId": "obj-短横线稳定标识",
+                      "name": "可测试对象名称",
+                      "requirementIds": [],
+                      "type": "ui|function|flow|data",
+                      "priority": "P0|P1|P2",
+                      "riskLevel": "high|medium|low",
+                      "dimensions": ["具体测试维度"],
+                      "coveredRequirements": ["关联的业务目标、用户动作或验收标准"],
+                      "negativeScenarios": ["需要重点覆盖的异常或边界场景"],
+                      "reason": "为什么需要覆盖该对象"
+                    }
+                  ]
+                }
+
+                只返回 JSON，不要添加其他文字。
                 """;
     }
 
@@ -242,8 +297,13 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
 
                 E2 拆分结果：""" + stringifyJson(e2Result) + """
 
+                """ + TRACE_ID_CONTRACT + """
+
                 请以 JSON 数组格式返回测试用例列表，必须使用以下英文字段名，且每个字段都不能为空：
                 - title: 用例标题
+                - draftCaseId: 稳定草稿用例ID，例如 case-login-success
+                - objectIds: 只能引用 E2 objects 中存在的 objectId
+                - requirementIds: 只能引用 E1 requirements 中存在的 requirementId，并与 objectIds 的上游关系一致
                 - precondition: 前置条件
                 - steps: 执行步骤列表
                 - expected: 预期结果
@@ -252,6 +312,7 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
                 - source: 来源("ai")
                 - pathType: 路径类型(happy/error/boundary/alternative)
 
+                每条用例必须至少引用一个 objectId 和一个 requirementId。
                 expected 必须描述用户或系统最终可观察到的结果，不要省略。
                 覆盖正常路径、异常路径和边界场景。只返回 JSON 数组，不要添加其他文字。
                 """;
@@ -263,8 +324,13 @@ public class AiTreeifyGenerationService implements TreeifyGenerationService {
 
                 需求：""" + input + """
 
+                """ + TRACE_ID_CONTRACT + """
+
                 请以 JSON 数组格式返回测试用例列表，必须使用以下英文字段名，且每个字段都不能为空：
                 - title: 用例标题
+                - draftCaseId: 稳定草稿用例ID，例如 case-login-success
+                - objectIds: 根据需求语义生成稳定 obj- ID 列表
+                - requirementIds: 根据需求语义生成稳定 req- ID 列表
                 - precondition: 前置条件
                 - steps: 执行步骤列表
                 - expected: 预期结果

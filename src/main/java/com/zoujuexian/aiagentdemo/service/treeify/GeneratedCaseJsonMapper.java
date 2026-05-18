@@ -63,7 +63,13 @@ public final class GeneratedCaseJsonMapper {
                 normalizePriority(firstText(obj, "priority", "优先级")),
                 firstStringList(obj, "tags", "tag", "labels", "标签"),
                 defaultText(firstText(obj, "source", "来源"), "ai"),
-                defaultText(firstText(obj, "pathType", "path_type", "type", "路径类型"), "happy")
+                defaultText(firstText(obj, "pathType", "path_type", "type", "路径类型"), "happy"),
+                defaultText(firstText(obj, "draftCaseId", "draft_case_id", "caseId", "traceCaseId"), stableId("case", title)),
+                firstIdList(obj, List.of("objectId", "id"), "objectIds", "object_ids", "objectId", "objects", "relatedObjectIds", "traceObjectIds", "测试对象ID"),
+                firstIdList(obj, List.of("requirementId", "id"), "requirementIds", "requirement_ids", "requirementId", "requirements", "relatedRequirementIds", "traceRequirementIds", "需求ID"),
+                null,
+                null,
+                null
         );
     }
 
@@ -103,6 +109,52 @@ public final class GeneratedCaseJsonMapper {
         return List.of();
     }
 
+    private static List<String> firstIdList(JSONObject obj, List<String> objectKeys, String... keys) {
+        for (String key : keys) {
+            Object value = obj.get(key);
+            List<String> values = toIdList(value, objectKeys);
+            if (!values.isEmpty()) {
+                return values;
+            }
+        }
+        return List.of();
+    }
+
+    private static List<String> toIdList(Object value, List<String> objectKeys) {
+        if (value == null) {
+            return List.of();
+        }
+        if (value instanceof JSONArray arr) {
+            List<String> result = new ArrayList<>();
+            for (int i = 0; i < arr.size(); i++) {
+                Object item = arr.get(i);
+                String text = "";
+                if (item instanceof JSONObject obj) {
+                    for (String key : objectKeys) {
+                        text = stringifyScalar(obj.get(key));
+                        if (!isBlank(text)) {
+                            break;
+                        }
+                    }
+                } else {
+                    text = stringifyScalar(item);
+                }
+                if (!isBlank(text)) {
+                    result.add(text.trim());
+                }
+            }
+            return result;
+        }
+        String text = stringifyScalar(value);
+        if (isBlank(text)) {
+            return List.of();
+        }
+        return Arrays.stream(text.split("[,，；;\\n]"))
+                .map(String::trim)
+                .filter(item -> !item.isBlank())
+                .toList();
+    }
+
     private static List<String> toStringList(Object value) {
         if (value == null) {
             return List.of();
@@ -122,7 +174,7 @@ public final class GeneratedCaseJsonMapper {
         if (isBlank(text)) {
             return List.of();
         }
-        return Arrays.stream(text.split("[；;\\n]"))
+        return Arrays.stream(text.split("[,，；;\\n]"))
                 .map(String::trim)
                 .filter(item -> !item.isBlank())
                 .toList();
@@ -183,11 +235,22 @@ public final class GeneratedCaseJsonMapper {
     }
 
     private static String normalizePriority(String value) {
-        String normalized = defaultText(value, "P1");
+        String normalized = defaultText(value, "P1").toUpperCase();
         return switch (normalized) {
             case "P0", "P1", "P2", "P3" -> normalized;
             default -> "P1";
         };
+    }
+
+    private static String stableId(String prefix, String title) {
+        String source = defaultText(title, "case").toLowerCase();
+        String slug = source
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-+|-+$", "");
+        if (slug.isBlank()) {
+            slug = Integer.toHexString(source.hashCode());
+        }
+        return prefix + "-" + slug;
     }
 
     private static String defaultText(String value, String fallback) {

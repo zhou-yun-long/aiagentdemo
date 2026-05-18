@@ -1,6 +1,7 @@
 package com.zoujuexian.aiagentdemo.service.treeify;
 
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateSseEventDto;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerationConfig;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -35,5 +36,15 @@ public interface TreeifyGenerationService {
     default Flux<GenerateSseEventDto> streamEvents(String taskId, String mode, String input, String currentStage,
                                                     String e1Result, String e2Result, String feedback, Long projectId) {
         return Flux.fromIterable(buildEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId));
+    }
+
+    /**
+     * Stream SSE events with generation config for taskKind routing.
+     * Default delegates to the config-free overload.
+     */
+    default Flux<GenerateSseEventDto> streamEvents(String taskId, String mode, String input, String currentStage,
+                                                    String e1Result, String e2Result, String feedback,
+                                                    Long projectId, GenerationConfig config) {
+        return streamEvents(taskId, mode, input, currentStage, e1Result, e2Result, feedback, projectId);
     }
 }

@@ -9,5 +9,7 @@ public interface TreeifyGenerationEventRepository extends JpaRepository<TreeifyG
 
     List<TreeifyGenerationEvent> findAllByTaskIdOrderBySequenceAsc(String taskId);
 
+    long countByTaskId(String taskId);
+
     void deleteByTaskId(String taskId);
 }

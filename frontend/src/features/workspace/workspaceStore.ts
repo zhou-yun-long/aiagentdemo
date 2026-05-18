@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { initialMindNodes } from '../../data/mindMap';
 import type { ExecutionStatus, Lane, MindNode, NodeKind, Priority, ThemeMode, WorkspaceStats } from '../../shared/types/workspace';
 import { formatStepList } from '../../shared/transforms/treeifyTransforms';
-import { autoBalanceMindMap } from '../../utils/mindMapLayout';
+import { autoBalanceMindMap, singleColumnLayout } from '../../utils/mindMapLayout';
 
 const MAX_HISTORY = 50;
 
@@ -62,6 +62,7 @@ type WorkspaceState = {
   setZoom: (zoom: number) => void;
   fitZoom: () => void;
   autoBalanceMap: () => void;
+  singleColumnMap: () => void;
   clearCanvas: () => void;
   clearExecutionRecords: () => void;
   snapshotCurrentResult: () => void;
@@ -143,7 +144,8 @@ function getDefaultTitle(kind: NodeKind) {
     case: '新增测试用例',
     condition: '新增前置条件',
     step: '新增执行步骤',
-    expected: '新增预期结果'
+    expected: '新增预期结果',
+    artifact: '阶段生成物'
   };
 
   return titles[kind];
@@ -192,6 +194,10 @@ function compareLayout(a: MindNode, b: MindNode) {
 
 function rebalance(nodes: MindNode[]): MindNode[] {
   return autoBalanceMindMap(nodes);
+}
+
+function singleColumnRebalance(nodes: MindNode[]): MindNode[] {
+  return singleColumnLayout(nodes);
 }
 
 export function getWorkspaceStats(nodes: MindNode[]): WorkspaceStats {
@@ -458,6 +464,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
       future: [],
       nodes: rebalance(state.nodes),
+      dirty: true,
+      layoutVersion: state.layoutVersion + 1
+    })),
+  singleColumnMap: () =>
+    set((state) => ({
+      past: [...state.past, cloneNodes(state.nodes)].slice(-MAX_HISTORY),
+      future: [],
+      nodes: singleColumnRebalance(state.nodes),
       dirty: true,
       layoutVersion: state.layoutVersion + 1
     })),

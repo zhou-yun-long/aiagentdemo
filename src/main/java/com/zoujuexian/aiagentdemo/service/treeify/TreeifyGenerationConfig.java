@@ -13,13 +13,6 @@ import org.springframework.context.annotation.Primary;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Selects which TreeifyGenerationService implementation to use based on
- * the treeify.generation.mode property (mock / ai / auto).
- *
- * When AI mode is active, uses OrchestrationService with composable StageAgents
- * and project summary/RAG context injection.
- */
 @Configuration
 public class TreeifyGenerationConfig {
 
@@ -28,42 +21,30 @@ public class TreeifyGenerationConfig {
     @Bean
     @Primary
     public TreeifyGenerationService treeifyGenerationService(
-            MockGenerationService mockService,
             SummaryService summaryService,
             KnowledgeService knowledgeService,
             ChatClient chatClient,
             @Value("${spring.ai.openai.api-key:}") String apiKey,
-            @Value("${treeify.generation.mode:auto}") String mode
+            @Value("${spring.ai.openai.base-url:}") String baseUrl,
+            @Value("${spring.ai.openai.chat.options.model:}") String model
     ) {
-        boolean llmAvailable = apiKey != null && !apiKey.isBlank() && !"test".equals(apiKey);
+        log.info("──────── LLM Configuration ────────");
+        log.info("  Base URL : {}", baseUrl);
+        log.info("  API Key  : {}", maskKey(apiKey));
+        log.info("  Model    : {}", model);
+        log.info("───────────────────────────────────");
 
-        TreeifyGenerationService selected;
-        if ("mock".equals(mode)) {
-            selected = mockService;
-            log.info("Treeify generation: using MOCK (forced by config)");
-        } else if ("ai".equals(mode)) {
-            selected = buildOrchestration(chatClient, mockService, summaryService, knowledgeService, apiKey);
-            log.info("Treeify generation: using AI (forced by config), llmAvailable={}", llmAvailable);
-        } else {
-            if (llmAvailable) {
-                selected = buildOrchestration(chatClient, mockService, summaryService, knowledgeService, apiKey);
-                log.info("Treeify generation: using AI (auto-detected from API key)");
-            } else {
-                selected = mockService;
-                log.info("Treeify generation: using MOCK (auto-detected, no valid API key)");
-            }
-        }
-        return selected;
-    }
-
-    private OrchestrationService buildOrchestration(ChatClient chatClient, MockGenerationService mockService,
-                                                     SummaryService summaryService, KnowledgeService knowledgeService,
-                                                     String apiKey) {
         Map<String, StageAgent> agents = new LinkedHashMap<>();
         agents.put("e1", new AiStageAgents.E1Agent(chatClient));
         agents.put("e2", new AiStageAgents.E2Agent(chatClient));
-        agents.put("e3", new AiStageAgents.E3Agent(chatClient, mockService));
+        agents.put("e3", new AiStageAgents.E3Agent(chatClient));
         agents.put("critic", new AiStageAgents.CriticAgent(chatClient));
-        return new OrchestrationService(agents, mockService, summaryService, knowledgeService, apiKey);
+        return new OrchestrationService(agents, summaryService, knowledgeService, apiKey);
+    }
+
+    private static String maskKey(String key) {
+        if (key == null || key.isBlank()) return "(empty)";
+        if (key.length() <= 8) return "****";
+        return key.substring(0, 4) + "..." + key.substring(key.length() - 4);
     }
 }

@@ -1,12 +1,15 @@
 package com.zoujuexian.aiagentdemo.service.treeify;
 
 import com.alibaba.fastjson.JSON;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zoujuexian.aiagentdemo.api.common.ApiErrorCode;
 import com.zoujuexian.aiagentdemo.api.common.BusinessException;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.BatchConfirmCasesRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CaseStatsDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.CreateGenerateTaskRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerationAttachmentRequest;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerationConfig;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateHistoryDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GenerateTaskDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.GeneratedCaseDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.MindmapNodeDto;
@@ -15,6 +18,7 @@ import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.ProjectRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.SaveMindmapRequest;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseDto;
 import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TestCaseRequest;
+import com.zoujuexian.aiagentdemo.api.controller.treeify.dto.TraceGraphDto;
 import com.zoujuexian.aiagentdemo.domain.entity.TreeifyGenerationEvent;
 import com.zoujuexian.aiagentdemo.domain.entity.TreeifyGenerationTask;
 import com.zoujuexian.aiagentdemo.domain.entity.TreeifyMindmapNode;
@@ -31,6 +35,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -52,19 +57,22 @@ public class TreeifyPersistenceService {
     private final TreeifyGenerationTaskRepository taskRepo;
     private final TreeifyMindmapNodeRepository mindmapRepo;
     private final TreeifyGenerationEventRepository eventRepo;
+    private final ObjectMapper objectMapper;
 
     public TreeifyPersistenceService(
             TreeifyProjectRepository projectRepo,
             TreeifyTestCaseRepository caseRepo,
             TreeifyGenerationTaskRepository taskRepo,
             TreeifyMindmapNodeRepository mindmapRepo,
-            TreeifyGenerationEventRepository eventRepo
+            TreeifyGenerationEventRepository eventRepo,
+            ObjectMapper objectMapper
     ) {
         this.projectRepo = projectRepo;
         this.caseRepo = caseRepo;
         this.taskRepo = taskRepo;
         this.mindmapRepo = mindmapRepo;
         this.eventRepo = eventRepo;
+        this.objectMapper = objectMapper;
     }
 
     @PostConstruct
@@ -154,6 +162,48 @@ public class TreeifyPersistenceService {
         return toDto(projectRepo.save(entity));
     }
 
+    public TraceGraphDto getTraceability(Long projectId) {
+        TreeifyProject project = findProject(projectId);
+        String json = defaultText(project.getTraceabilityJson(), "").trim();
+        if (json.isBlank()) {
+            return emptyTraceGraph(projectId);
+        }
+        try {
+            TraceGraphDto graph = objectMapper.readValue(json, TraceGraphDto.class);
+            if (graph == null) {
+                return emptyTraceGraph(projectId);
+            }
+            return new TraceGraphDto(
+                    projectId,
+                    graph.getTaskId(),
+                    graph.getNodes() == null ? List.of() : graph.getNodes(),
+                    graph.getEdges() == null ? List.of() : graph.getEdges(),
+                    graph.getUpdatedAt() == null ? project.getUpdatedAt().toString() : graph.getUpdatedAt()
+            );
+        } catch (Exception ignored) {
+            return emptyTraceGraph(projectId);
+        }
+    }
+
+    public TraceGraphDto saveTraceability(Long projectId, TraceGraphDto request) {
+        TreeifyProject project = findProject(projectId);
+        TraceGraphDto graph = new TraceGraphDto(
+                projectId,
+                request == null ? null : request.getTaskId(),
+                request == null || request.getNodes() == null ? List.of() : request.getNodes(),
+                request == null || request.getEdges() == null ? List.of() : request.getEdges(),
+                LocalDateTime.now().toString()
+        );
+        try {
+            project.setTraceabilityJson(objectMapper.writeValueAsString(graph));
+        } catch (Exception ex) {
+            throw new BusinessException(ApiErrorCode.INTERNAL_ERROR, "保存追踪关系失败");
+        }
+        project.setUpdatedAt(LocalDateTime.now());
+        projectRepo.save(project);
+        return graph;
+    }
+
     // ──── TestCase CRUD ────
 
     public List<TestCaseDto> listCases(Long projectId) {
@@ -237,6 +287,27 @@ public class TreeifyPersistenceService {
         return new CaseStatsDto(total, measured, passed, passRate);
     }
 
+    public Map<Long, CaseStatsDto> getAllProjectStats() {
+        List<Object[]> rows = caseRepo.countStatsGroupedByProject();
+        Map<Long, CaseStatsDto> map = new HashMap<>();
+        for (Object[] row : rows) {
+            Long pid = (Long) row[0];
+            long total = (Long) row[1];
+            long measured = (Long) row[2];
+            long passed = (Long) row[3];
+            double rate = measured == 0 ? 0 : (double) passed / measured;
+            map.put(pid, new CaseStatsDto(total, measured, passed, rate));
+        }
+        return map;
+    }
+
+    public ProjectDto restoreProject(Long projectId) {
+        TreeifyProject entity = findProject(projectId);
+        entity.setStatus("active");
+        entity.setUpdatedAt(LocalDateTime.now());
+        return toDto(projectRepo.save(entity));
+    }
+
     // ──── Mindmap CRUD ────
 
     public List<MindmapNodeDto> getMindmap(Long projectId) {
@@ -281,6 +352,9 @@ public class TreeifyPersistenceService {
         }
         List<Long> contextCaseIds = normalizeContextCaseIds(request == null ? null : request.contextCaseIds());
         String selectedNodeId = defaultText(request == null ? null : request.selectedNodeId(), "");
+        String taskKind = normalizeTaskKind(
+                request != null && request.generationConfig() != null ? request.generationConfig().taskKind() : null
+        );
         String generationInput = appendGenerationContext(
                 projectId,
                 input,
@@ -298,6 +372,10 @@ public class TreeifyPersistenceService {
         entity.setInputText(generationInput);
         entity.setSelectedNodeId(selectedNodeId.isBlank() ? null : selectedNodeId);
         entity.setContextCaseIds(contextCaseIds.isEmpty() ? null : JSON.toJSONString(contextCaseIds));
+        entity.setTaskKind(taskKind);
+        if (request != null && request.generationConfig() != null) {
+            entity.setGenerationConfigJson(JSON.toJSONString(request.generationConfig()));
+        }
         entity.setStatus("pending");
         entity.setStreamUrl("/api/v1/generate/" + taskId + "/stream");
         entity.setCreatedAt(now);
@@ -310,8 +388,36 @@ public class TreeifyPersistenceService {
         return toDto(findTask(taskId));
     }
 
+    public List<GenerateHistoryDto> listGenerateTasks(Long projectId) {
+        findProject(projectId);
+        return taskRepo.findAllByProjectIdOrderByCreatedAtDesc(projectId).stream()
+                .map(this::toHistoryDto)
+                .toList();
+    }
+
+    private GenerateHistoryDto toHistoryDto(TreeifyGenerationTask entity) {
+        long eventCount = eventRepo.countByTaskId(entity.getTaskId());
+        return new GenerateHistoryDto(
+                entity.getTaskId(),
+                entity.getProjectId(),
+                entity.getMode(),
+                entity.getStatus(),
+                entity.getCurrentStage(),
+                entity.getTaskKind(),
+                entity.getCriticScore(),
+                (int) eventCount,
+                entity.getCreatedAt(),
+                entity.getUpdatedAt(),
+                entity.getCompletedAt()
+        );
+    }
+
     public String getTaskInput(String taskId) {
         return defaultText(findTask(taskId).getInputText(), "");
+    }
+
+    public GenerationConfig getTaskGenerationConfig(String taskId) {
+        return parseGenerationConfig(findTask(taskId).getGenerationConfigJson());
     }
 
     private List<Long> normalizeContextCaseIds(List<Long> caseIds) {
@@ -391,19 +497,17 @@ public class TreeifyPersistenceService {
                     .append("，大小=").append(size).append(" bytes")
                     .append('\n');
 
-            String content = defaultText(attachment.content(), "").trim();
-            if (content.isBlank()) {
-                context.append("  内容：该附件未提取到可读文本，请结合文件名和用户输入理解。\n");
+            String attachmentId = defaultText(attachment.attachmentId(), "").trim();
+            if (attachmentId.isBlank()) {
+                context.append("  内容：该附件未提供 attachmentId，请结合文件名和用户输入理解。\n");
                 continue;
             }
 
             if ("image".equals(kind)) {
-                context.append("  图片数据：").append(truncateText(content, MAX_IMAGE_DATA_URL_CHARS))
+                context.append("  图片附件ID：").append(attachmentId)
                         .append("\n  说明：当前三阶段文字链路会保留图片附件信息；若模型不支持视觉输入，请依据文件名和用户补充说明生成用例。\n");
             } else {
-                context.append("  文档内容：\n")
-                        .append(truncateText(content, MAX_ATTACHMENT_TEXT_CHARS))
-                        .append('\n');
+                context.append("  文档附件ID：").append(attachmentId).append('\n');
             }
         }
     }
@@ -479,6 +583,10 @@ public class TreeifyPersistenceService {
                 .orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "生成任务不存在: " + taskId));
     }
 
+    private TraceGraphDto emptyTraceGraph(Long projectId) {
+        return new TraceGraphDto(projectId, null, List.of(), List.of(), LocalDateTime.now().toString());
+    }
+
     // ──── Entity → DTO converters ────
 
     private ProjectDto toDto(TreeifyProject entity) {
@@ -523,13 +631,26 @@ public class TreeifyPersistenceService {
                 entity.getCriticScore(),
                 entity.getSelectedNodeId(),
                 parseContextCaseIds(entity.getContextCaseIds()),
+                entity.getTaskKind(),
                 entity.getE1Result(),
                 entity.getE2Result(),
                 entity.getFeedback(),
+                parseGenerationConfig(entity.getGenerationConfigJson()),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
                 entity.getCompletedAt()
         );
+    }
+
+    private GenerationConfig parseGenerationConfig(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return JSON.parseObject(json, GenerationConfig.class);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private MindmapNodeDto toDto(TreeifyMindmapNode entity) {
@@ -800,6 +921,14 @@ public class TreeifyPersistenceService {
         String safe = defaultText(mode, "auto").trim();
         if (!"auto".equals(safe) && !"step".equals(safe)) {
             throw new BusinessException(ApiErrorCode.BAD_REQUEST, "生成模式只支持 auto 或 step");
+        }
+        return safe;
+    }
+
+    private String normalizeTaskKind(String taskKind) {
+        String safe = defaultText(taskKind, "cases").trim();
+        if (!"cases".equals(safe) && !"points".equals(safe) && !"api_cases".equals(safe)) {
+            throw new BusinessException(ApiErrorCode.BAD_REQUEST, "taskKind 只支持 cases/points/api_cases");
         }
         return safe;
     }

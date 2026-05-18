@@ -1,77 +1,28 @@
-# speccase 前后端对接文档
+# 测试平台对接文档
 
-> 本文档记录当前前端线程已实现的对接契约、运行模式、SSE 事件处理和用例回填流程。目标是让后端可用时前端自动走真实接口，后端不可用时继续使用 mock 演示。
+> 本文档记录测试平台前后端的 REST API 契约、SSE 事件格式和附件上传流程。所有接口路径以 `/api/v1` 为前缀。
 
-## 0. 当前完成情况
+## 1. 统一响应格式
 
-更新时间：2026-04-26
+所有接口返回统一 JSON 结构：
 
-当前分支：`codex/backend-contracts`
-
-### 0.1 后端完成情况
-
-| 模块 | 状态 | 说明 | 主要文件 |
-| --- | --- | --- | --- |
-| Maven Wrapper 配置 | 已完成 | 补齐 `.mvn/wrapper/maven-wrapper.properties`，可用 `./mvnw` 构建 | `.mvn/wrapper/maven-wrapper.properties` |
-| 统一响应 | 已完成 | `/api/v1/**` 使用 `{ code, data, message, requestId }` | `src/main/java/com/zoujuexian/aiagentdemo/api/common/ApiResponse.java` |
-| 错误码与异常处理 | 已完成 | 新增错误码、业务异常和 Treeify 控制器异常处理 | `api/common/ApiErrorCode.java`, `BusinessException.java`, `GlobalExceptionHandler.java` |
-| 项目接口 | 已完成 mock 版 | 支持列表、创建、详情、更新、归档 | `api/controller/treeify/ProjectController.java` |
-| 用例接口 | 已完成 mock 版 | 支持列表、统计、创建、更新、删除、执行状态、批量确认 | `api/controller/treeify/TestCaseController.java` |
-| 生成任务接口 | 已完成 mock 版 | 支持创建任务、查询任务、SSE 流、确认、取消 | `api/controller/treeify/GenerateController.java` |
-| 后端 DTO | 已完成 | 覆盖前端 `ProjectDto`、`TestCaseDto`、`GenerateTaskDto`、`GenerateSseEventDto` 等类型 | `api/controller/treeify/dto/` |
-| 内存 mock 服务 | 已完成 | 内置示例项目、登录用例、生成用例、SSE 事件序列 | `service/treeify/MockTreeifyService.java` |
-
-### 0.2 已验证结果
-
-后端编译通过：
-
-```bash
-JAVA_HOME='/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home' ./mvnw -q -DskipTests compile
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {},
+  "requestId": "req-xxx"
+}
 ```
 
-Spring 上下文测试通过：
-
-```bash
-JAVA_HOME='/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home' OPENAI_API_KEY=test ./mvnw -q test
-```
-
-说明：不设置 `OPENAI_API_KEY` 时，Spring AI 自动配置会因为 API key 为空导致测试上下文加载失败。当前 mock 接口不调用真实 LLM，但应用启动仍会初始化 Spring AI，因此测试和本地启动至少需要一个非空 dummy key。
-
-本地接口已验证：
-
-| 接口 | 验证状态 |
+| 字段 | 要求 |
 | --- | --- |
-| `GET /api/v1/projects` | 通过 |
-| `GET /api/v1/projects/1/cases` | 通过 |
-| `GET /api/v1/projects/1/cases/stats` | 通过 |
-| `POST /api/v1/projects/1/generate` | 通过 |
-| `GET /api/v1/generate/{taskId}/stream` | 通过 |
+| `code` | 成功必须为 `0`，非 0 表示业务错误 |
+| `message` | 失败时用于前端错误提示 |
+| `data` | 业务数据，类型由具体接口定义 |
+| `requestId` | 请求追踪 ID，便于排查 |
 
-SSE 输出已确认只包含默认 message 事件，不发送自定义 `event:` 行；前端可以继续使用 `eventSource.onmessage`，并从 `JSON.parse(message.data).event` 读取业务事件类型。
-
-### 0.3 当前未完成
-
-| 项目 | 状态 | 下一步 |
-| --- | --- | --- |
-| 数据库持久化 | 未开始 | 后续用 MySQL 替换 `MockTreeifyService` 内存数据 |
-| 真实 E1/E2/E3/Critic 编排 | 未开始 | 后续新增 `OrchestrationService` 并接 Spring AI |
-| 项目级 RAG/摘要 | 未开始 | 后续接 `project_summaries`、`knowledge_chunks` |
-| 鉴权/权限 | 未开始 | P0 先默认单用户，P1 再接登录态 |
-| OpenAPI 文档 | 未开始 | 建议下一步补接口样例或 OpenAPI |
-
-## 1. 当前前端状态
-
-前端已完成以下骨架：
-
-| 能力 | 状态 | 主要文件 |
-| --- | --- | --- |
-| 工作台节点状态管理 | 已完成，本地可编辑、增删、移动、导出 | `frontend/src/features/workspace/workspaceStore.ts` |
-| 生成任务状态管理 | 已完成，支持 E1/E2/E3/Critic 状态 | `frontend/src/features/generation/generationStore.ts` |
-| mock SSE 生成流 | 已完成 | `frontend/src/features/generation/useGenerateStream.ts` |
-| 真实 API 接口封装 | 已完成 | `frontend/src/shared/api/treeify.ts` |
-| 后端 DTO 类型 | 已完成 | `frontend/src/shared/types/treeify.ts` |
-| DTO 转换层 | 已完成 | `frontend/src/shared/transforms/treeifyTransforms.ts` |
-| 生成面板与候选用例预览 | 已完成 | `frontend/src/components/GeneratePanel.tsx`, `frontend/src/components/CasePreviewTable.tsx` |
+前端请求封装：`frontend/src/shared/api/request.ts`
 
 ## 2. 前端运行模式
 
@@ -85,118 +36,131 @@ VITE_TREEIFY_PROJECT_ID=1
 | 变量 | 可选值 | 默认值 | 说明 |
 | --- | --- | --- | --- |
 | `VITE_TREEIFY_API_MODE` | `auto` / `mock` / `real` | `auto` | `auto` 先尝试真实后端，失败回落 mock；`real` 强制真实后端；`mock` 强制本地 mock |
-| `VITE_TREEIFY_PROJECT_ID` | 正整数 | `1` | 创建生成任务和批量确认用例时使用的项目 ID |
+| `VITE_TREEIFY_PROJECT_ID` | 正整数 | `1` | 前端默认使用的项目 ID |
 
-Vite 已配置代理：
+联调时前端运行在 `http://localhost:5173`，后端运行在 `http://localhost:8080`，Vite 代理将 `/api/` 转发到后端。
 
-```ts
-server: {
-  port: 5173,
-  proxy: {
-    '/api': 'http://localhost:8080'
-  }
-}
+## 3. 项目接口
+
+### 3.1 项目 CRUD
+
+**GET `/api/v1/projects`** — 项目列表
+
+Response：`ProjectDto[]`
+
+**POST `/api/v1/projects`** — 创建项目
+
+```json
+{ "name": "项目名称", "description": "项目描述" }
 ```
 
-联调时：
+Response：`ProjectDto`（HTTP 201）
 
-1. 前端访问 `http://127.0.0.1:5173/`
-2. 后端启动在 `http://localhost:8080`
-3. 前端请求 `/api/v1/**` 由 Vite 代理到后端
+**GET `/api/v1/projects/{projectId}`** — 项目详情
 
-## 3. 统一响应格式
+Response：`ProjectDto`
 
-前端 `request<T>()` 按以下结构解析：
+**PUT `/api/v1/projects/{projectId}`** — 更新项目
+
+```json
+{ "name": "新名称", "description": "新描述" }
+```
+
+Response：`ProjectDto`
+
+**DELETE `/api/v1/projects/{projectId}`** — 归档项目
+
+Response：`ProjectDto`
+
+**PATCH `/api/v1/projects/{projectId}/restore`** — 恢复已归档项目
+
+Response：`ProjectDto`
+
+### 3.2 需求追溯图
+
+**GET `/api/v1/projects/{projectId}/traceability`** — 获取追溯图
+
+Response：`TraceGraphDto`
+
+**PUT `/api/v1/projects/{projectId}/traceability`** — 保存追溯图
+
+Request Body：`TraceGraphDto`
+Response：`TraceGraphDto`
+
+### 3.3 项目分享
+
+**POST `/api/v1/projects/{projectId}/share`** — 创建分享链接
+
+Response：`ShareDto`（HTTP 201）
+
+**GET `/api/v1/projects/{projectId}/share`** — 获取分享信息
+
+Response：`ShareDto`
+
+**DELETE `/api/v1/projects/{projectId}/share`** — 撤销分享
+
+Response：`null`
+
+**GET `/api/v1/share/{token}`** — 通过 token 访问分享数据（无需鉴权）
+
+Response：`ShareDataDto`
+
+## 4. 用例接口
+
+### 4.1 用例 CRUD
+
+**GET `/api/v1/projects/{projectId}/cases`** — 项目用例列表
+
+Response：`TestCaseDto[]`
+
+**GET `/api/v1/projects/{projectId}/cases/stats`** — 单项目用例统计
+
+Response：`CaseStatsDto`
+
+**GET `/api/v1/projects/cases/stats`** — 所有项目用例统计
+
+Response：`Map<projectId, CaseStatsDto>`
+
+**POST `/api/v1/projects/{projectId}/cases`** — 创建用例
 
 ```json
 {
-  "code": 0,
-  "message": "ok",
-  "data": {},
-  "requestId": "req-xxx"
+  "title": "用例标题",
+  "precondition": "前置条件",
+  "steps": ["步骤1", "步骤2"],
+  "expected": "预期结果",
+  "priority": "P0",
+  "tags": ["Web"],
+  "parentId": null
 }
 ```
 
-要求：
+Response：`TestCaseDto`（HTTP 201）
 
-| 字段 | 要求 |
-| --- | --- |
-| `code` | 成功必须为 `0` |
-| `message` | 失败时用于前端错误提示 |
-| `data` | 业务数据 |
-| `requestId` | 可选，但建议返回，便于排查 |
+**PUT `/api/v1/cases/{caseId}`** — 更新用例
 
-前端文件：`frontend/src/shared/api/request.ts`
+Request Body：同创建
+Response：`TestCaseDto`
 
-## 4. 项目接口
+**DELETE `/api/v1/cases/{caseId}`** — 删除用例
 
-### GET `/api/v1/projects`
-
-用途：获取项目列表。
-
-前端类型：
-
-```ts
-type ProjectDto = {
-  id: number;
-  name: string;
-  description: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-};
+```json
+{ "deleted": true, "caseId": 123 }
 ```
 
-### GET `/api/v1/projects/{projectId}`
+**PATCH `/api/v1/cases/{caseId}/execution-status`** — 更新执行状态
 
-用途：获取项目详情。
-
-### 后续待接入
-
-当前前端生成链路已经会使用 `VITE_TREEIFY_PROJECT_ID`，但工作台启动时还未自动加载项目和用例。下一步建议接：
-
-1. 启动时 `GET /api/v1/projects`
-2. 选择第一个 active 项目
-3. 拉取 `GET /api/v1/projects/{projectId}/cases`
-4. 用 `testCasesToMindNodes()` 转为画布节点
-
-## 5. 用例接口
-
-### GET `/api/v1/projects/{projectId}/cases`
-
-用途：获取项目下测试用例。
-
-前端类型：
-
-```ts
-type TestCaseDto = {
-  id: number;
-  projectId: number;
-  parentId?: number | null;
-  title: string;
-  precondition: string;
-  steps: string[];
-  expected: string;
-  priority: 'P0' | 'P1' | 'P2' | 'P3';
-  tags: string[];
-  source: string;
-  executionStatus: 'not_run' | 'running' | 'passed' | 'failed' | 'blocked' | 'skipped';
-  layout?: Record<string, unknown>;
-  version: number;
-  createdAt: string;
-  updatedAt: string;
-};
+```json
+{ "executionStatus": "passed" }
 ```
 
-### GET `/api/v1/projects/{projectId}/cases/stats`
+可选值：`not_run` / `running` / `passed` / `failed` / `blocked` / `skipped`
 
-用途：获取用例统计。当前前端暂时按本地节点计算统计，后续可切换到该接口。
+Response：`TestCaseDto`
 
-### POST `/api/v1/cases/batch-confirm`
+### 4.2 批量确认
 
-用途：生成候选用例确认后保存到后端。
-
-Request：
+**POST `/api/v1/cases/batch-confirm`** — 批量确认 AI 生成的候选用例
 
 ```json
 {
@@ -204,11 +168,11 @@ Request：
   "cases": [
     {
       "title": "正确账号密码登录成功",
-      "precondition": "用户已注册合法账号，系统处于正常运行状态",
-      "steps": ["打开登录页面", "输入正确的用户名和密码", "点击登录按钮"],
+      "precondition": "用户已注册合法账号",
+      "steps": ["打开登录页面", "输入正确账号密码", "点击登录按钮"],
       "expected": "登录成功并跳转首页",
       "priority": "P0",
-      "tags": ["Web", "AI"],
+      "tags": ["Web"],
       "source": "ai",
       "pathType": "happy"
     }
@@ -218,29 +182,28 @@ Request：
 
 Response：`TestCaseDto[]`
 
-前端行为：
+### 4.3 思维导图
 
-| 模式 | 行为 |
-| --- | --- |
-| `real` | 调用 `/api/v1/cases/batch-confirm`，成功后把返回的 `TestCaseDto[]` 转成画布节点 |
-| `auto` | 如果真实接口失败，前端会本地回填候选用例 |
-| `mock` | 直接本地回填 |
+**GET `/api/v1/projects/{projectId}/mindmap`** — 获取思维导图节点
 
-转换函数：
+Response：`MindmapNodeDto[]`
 
-| 函数 | 文件 | 说明 |
-| --- | --- | --- |
-| `draftToGeneratedCaseDto` | `frontend/src/shared/transforms/treeifyTransforms.ts` | 前端候选草稿转后端 `GeneratedCaseDto` |
-| `testCasesToRows` | 同上 | 后端保存结果转画布回填 rows |
-| `testCasesToMindNodes` | 同上 | 后端用例转思维导图节点，下一步项目加载会使用 |
+**PUT `/api/v1/projects/{projectId}/mindmap`** — 保存思维导图节点
 
-## 6. 生成任务接口
+Request Body：`SaveMindmapRequest`
+Response：`MindmapNodeDto[]`
 
-### POST `/api/v1/projects/{projectId}/generate`
+### 4.4 用例导出
 
-用途：创建生成任务。
+**GET `/api/v1/projects/{projectId}/export/excel`** — 导出 Excel
 
-Request：
+Response：`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`（二进制下载）
+
+## 5. 用例生成接口
+
+### 5.1 任务管理
+
+**POST `/api/v1/projects/{projectId}/generate`** — 创建生成任务
 
 ```json
 {
@@ -252,16 +215,7 @@ Request：
 }
 ```
 
-当前前端实际发送：
-
-```json
-{
-  "mode": "auto",
-  "input": "用户输入的需求文本"
-}
-```
-
-Response：
+Response（HTTP 202）：
 
 ```json
 {
@@ -278,47 +232,66 @@ Response：
 }
 ```
 
-### GET `/api/v1/generate/{taskId}/stream`
+**GET `/api/v1/projects/{projectId}/generate/history`** — 生成历史
 
-用途：SSE 订阅生成过程。
+Response：`GenerateHistoryDto[]`
 
-前端使用：
+**GET `/api/v1/generate/{taskId}`** — 查询任务状态
+
+Response：`GenerateTaskDto`
+
+**POST `/api/v1/generate/{taskId}/confirm`** — 确认当前阶段继续
+
+```json
+{ "stage": "e1", "feedback": "可选修改意见" }
+```
+
+Response：`GenerateTaskDto`
+
+**POST `/api/v1/generate/{taskId}/cancel`** — 取消生成任务
+
+Response：`GenerateTaskDto`
+
+**GET `/api/v1/generation/dimensions`** — 获取生成维度配置
+
+Response：`DimensionsDto`
+
+### 5.2 SSE 事件流
+
+**GET `/api/v1/generate/{taskId}/stream`** — SSE 订阅生成过程
+
+Content-Type: `text/event-stream`
+
+前端使用方式：
 
 ```ts
 const eventSource = new EventSource(task.streamUrl);
 eventSource.onmessage = (message) => {
   const event = JSON.parse(message.data);
+  // event.event: 业务事件类型
+  // event.stage: 当前阶段
+  // event.payload: 事件数据
 };
 ```
 
-后端需要保证每条 SSE 的 `data` 是完整 JSON：
+SSE 数据格式：
 
-```text
-data: {"event":"stage_chunk","taskId":"...","stage":"e1","sequence":2,"timestamp":"...","payload":{"content":"..."}}
+```
+id:1
+data:{"event":"stage_started","taskId":"...","stage":"e1","sequence":1,"timestamp":"...","payload":{"stage":"e1"}}
 ```
 
-### POST `/api/v1/generate/{taskId}/confirm`
+注意：不要依赖 SSE 协议层的 `event:` 行；业务事件类型统一从 `data.event` 读取。
 
-用途：逐步模式下确认当前阶段继续。
+### 5.3 事件重放
 
-Request：
+**GET `/api/v1/generate/{taskId}/events`** — 获取持久化的事件记录
 
-```json
-{
-  "stage": "e1",
-  "feedback": "可选修改意见"
-}
-```
+Response：`TreeifyGenerationEvent[]`
 
-当前前端会发送当前 `activeStage`。
+### 5.4 SSE 事件类型
 
-### POST `/api/v1/generate/{taskId}/cancel`
-
-用途：取消生成任务。
-
-## 7. SSE 事件契约
-
-前端支持 4 类事件：
+所有事件遵循以下结构：
 
 ```ts
 type GenerateSseEventDto = {
@@ -331,7 +304,7 @@ type GenerateSseEventDto = {
 };
 ```
 
-### `stage_started`
+**`stage_started`** — 阶段开始
 
 ```json
 {
@@ -344,9 +317,9 @@ type GenerateSseEventDto = {
 }
 ```
 
-前端行为：对应阶段进入 running。
+前端行为：对应阶段进入 running 状态。
 
-### `stage_chunk`
+**`stage_chunk`** — 阶段流式输出
 
 ```json
 {
@@ -359,9 +332,9 @@ type GenerateSseEventDto = {
 }
 ```
 
-前端行为：把 `payload.content` 追加到当前阶段流式输出。
+前端行为：将 `payload.content` 追加到当前阶段流式输出区域。
 
-### `stage_done`
+**`stage_done`** — 阶段完成
 
 ```json
 {
@@ -372,23 +345,17 @@ type GenerateSseEventDto = {
   "timestamp": "2026-04-25T10:00:02",
   "payload": {
     "needConfirm": true,
-    "result": {
-      "businessGoals": ["提升登录链路质量"]
-    }
+    "result": { "businessGoals": ["提升登录链路质量"] }
   }
 }
 ```
 
-前端行为：
-
-| `payload.needConfirm` | 行为 |
+| `payload.needConfirm` | 前端行为 |
 | --- | --- |
-| `true` | 任务状态变为 `waiting_confirm`，等待用户点击“继续下一阶段” |
+| `true` | 任务状态变为 `waiting_confirm`，等待用户点击"继续下一阶段" |
 | `false` | 阶段完成，继续消费后续 SSE |
 
-`payload.result` 可以是字符串、数组或对象；前端会 `JSON.stringify(result, null, 2)` 展示。
-
-### `generation_complete`
+**`generation_complete`** — 生成完成
 
 ```json
 {
@@ -406,7 +373,7 @@ type GenerateSseEventDto = {
         "steps": ["打开登录页面", "输入正确账号密码", "点击登录按钮"],
         "expected": "登录成功并跳转首页",
         "priority": "P0",
-        "tags": ["Web", "AI"],
+        "tags": ["Web"],
         "source": "ai",
         "pathType": "happy"
       }
@@ -415,115 +382,244 @@ type GenerateSseEventDto = {
 }
 ```
 
-前端行为：
+前端行为：关闭 SSE → 标记任务为 `done` → 展示 Critic 分数 → 将 `payload.cases` 转为候选用例表 → 用户确认后批量保存。
 
-1. 关闭 SSE
-2. 标记任务为 `done`
-3. 展示 Critic 分数
-4. 将 `payload.cases` 转为候选用例表
-5. 用户点击“确认回填”后保存/回填到思维导图
+## 6. 测试计划接口
 
-## 8. 前端生成流程
+**POST `/api/v1/plans`** — 创建测试计划
 
-```text
-用户输入需求
-  -> 点击启动生成
-  -> auto 模式尝试 POST /api/v1/projects/{projectId}/generate
-    -> 成功：EventSource 订阅 streamUrl
-    -> 失败：回落本地 mock 流
-  -> 展示 E1/E2/E3/Critic 流式过程
-  -> generation_complete 后展示候选用例
-  -> 用户编辑候选用例
-  -> 点击确认回填
-    -> real：POST /api/v1/cases/batch-confirm
-    -> mock/fallback：本地回填
-  -> 思维导图新增用例节点
+```json
+{
+  "projectId": 1,
+  "name": "v1.0 回归测试",
+  "description": "核心功能回归",
+  "caseIds": [1, 2, 3]
+}
 ```
 
-## 9. 联调检查清单
+Response：`TestPlanDto`（HTTP 201）
 
-### 后端本地启动
+**GET `/api/v1/projects/{projectId}/plans`** — 项目计划列表
 
-当前机器可使用 IntelliJ 内置 JDK 运行后端：
+Response：`TestPlanDto[]`
+
+**GET `/api/v1/plans/{planId}`** — 计划详情（含关联用例）
+
+Response：`PlanDetailDto`
+
+**PUT `/api/v1/plans/{planId}`** — 更新计划
+
+Request Body：同创建
+Response：`TestPlanDto`
+
+**DELETE `/api/v1/plans/{planId}`** — 删除计划
+
+Response：`null`
+
+**PUT `/api/v1/plans/{planId}/cases/{caseId}/result`** — 更新用例执行结果
+
+```json
+{
+  "executionResult": "passed",
+  "note": "备注"
+}
+```
+
+可选值：`not_run` / `passed` / `failed` / `blocked` / `skipped`
+
+Response：`PlanCaseDto`
+
+**POST `/api/v1/plans/{planId}/recompute`** — 重算计划状态
+
+Response：`TestPlanDto`
+
+## 7. 测试报告接口
+
+**POST `/api/v1/plans/{planId}/reports?projectId={projectId}`** — 生成报告
+
+Response：`TestReportDto`（HTTP 201）
+
+**GET `/api/v1/projects/{projectId}/reports`** — 项目报告列表
+
+Response：`TestReportDto[]`
+
+**GET `/api/v1/reports/{reportId}`** — 报告详情
+
+Response：`TestReportDto`
+
+**GET `/api/v1/reports/{reportId}/summary`** — 报告汇总统计
+
+Response：`ReportSummaryDto`
+
+**GET `/api/v1/reports/{reportId}/failed-cases`** — 失败用例列表
+
+Response：`FailedCaseDto[]`
+
+**GET `/api/v1/reports/{reportId}/export?format=excel|pdf`** — 导出报告
+
+Response：二进制文件下载（Excel 或 PDF）
+
+## 8. Dashboard 接口
+
+**GET `/api/v1/projects/{projectId}/dashboard`** — 项目数据看板
+
+Response：`DashboardDto`
+
+## 9. 附件上传
+
+**POST `/api/v1/projects/{projectId}/attachments`** — 上传附件
+
+Content-Type: `multipart/form-data`
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `file` | MultipartFile | 是 | 上传的文件，单文件限制 50MB |
+| `purpose` | String | 否 | 附件用途，默认 `requirement` |
+
+Response：`AttachmentDto`
+
+配置：
+
+```
+spring.servlet.multipart.max-file-size=50MB
+spring.servlet.multipart.max-request-size=55MB
+```
+
+## 10. 知识库接口
+
+**POST `/api/v1/projects/{projectId}/knowledge`** — 添加知识文档
+
+```json
+{ "title": "文档标题", "content": "文档内容" }
+```
+
+Response：`KnowledgeDocumentDto`
+
+**GET `/api/v1/projects/{projectId}/knowledge`** — 知识文档列表
+
+Response：`KnowledgeDocumentDto[]`
+
+**DELETE `/api/v1/knowledge/{documentId}`** — 删除知识文档
+
+Response：`null`
+
+**POST `/api/v1/projects/{projectId}/knowledge/search`** — 搜索知识文档
+
+参数：`keyword`（必填）、`limit`（默认 5）
+Response：`KnowledgeDocumentDto[]`
+
+## 11. 项目摘要接口
+
+**GET `/api/v1/projects/{projectId}/summary`** — 当前摘要
+
+Response：`ProjectSummaryDto`
+
+**GET `/api/v1/projects/{projectId}/summary/history`** — 摘要历史版本
+
+Response：`ProjectSummaryDto[]`
+
+**POST `/api/v1/projects/{projectId}/summary/generate`** — 生成摘要
+
+参数：`context`（可选 query param）
+Response：`ProjectSummaryDto`
+
+**POST `/api/v1/projects/{projectId}/summary/rollback/{version}`** — 回滚摘要
+
+Response：`ProjectSummaryDto`
+
+## 12. 快照接口
+
+**GET `/api/v1/projects/{projectId}/snapshots`** — 快照列表
+
+Response：`SnapshotDto[]`
+
+**POST `/api/v1/projects/{projectId}/snapshots`** — 创建快照
+
+Request Body（可选）：`CreateSnapshotRequest`
+Response：`SnapshotDto`（HTTP 201）
+
+**GET `/api/v1/snapshots/{snapshotId}`** — 快照详情
+
+Response：`SnapshotDto`
+
+**DELETE `/api/v1/snapshots/{snapshotId}`** — 删除快照
+
+Response：`null`
+
+## 13. 核心 DTO 类型
+
+```ts
+type ProjectDto = {
+  id: number;
+  name: string;
+  description: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type TestCaseDto = {
+  id: number;
+  projectId: number;
+  parentId?: number | null;
+  title: string;
+  precondition: string;
+  steps: string[];
+  expected: string;
+  priority: 'P0' | 'P1' | 'P2' | 'P3';
+  tags: string[];
+  source: string;
+  executionStatus: 'not_run' | 'running' | 'passed' | 'failed' | 'blocked' | 'skipped';
+  layout?: Record<string, unknown>;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type GenerateTaskDto = {
+  taskId: string;
+  projectId: number;
+  mode: string;
+  status: string;
+  currentStage: string | null;
+  streamUrl: string;
+  criticScore: number | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+};
+```
+
+## 14. 联调检查清单
+
+### 后端启动
 
 ```bash
-JAVA_HOME='/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home' \
+JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home \
 OPENAI_API_KEY=test \
 ./mvnw spring-boot:run
 ```
 
-如需指定端口：
+### 验证接口
 
 ```bash
-JAVA_HOME='/Applications/IntelliJ IDEA.app/Contents/jbr/Contents/Home' \
-OPENAI_API_KEY=test \
-./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=18080
-```
-
-`OPENAI_API_KEY=test` 只用于 mock 接口和 Spring 上下文启动验证；真实 AI 编排接入后需要替换为真实密钥。
-
-### 后端启动检查
-
-```bash
+# 项目列表
 curl http://localhost:8080/api/v1/projects
-```
 
-期望：返回统一响应 `{ code: 0, data: [...] }`
-
-### 前端代理检查
-
-```bash
-curl http://127.0.0.1:5173/api/v1/projects
-```
-
-期望：能通过 Vite 代理拿到后端响应。
-
-### 生成任务检查
-
-```bash
-curl -X POST http://127.0.0.1:5173/api/v1/projects/1/generate \
+# 创建生成任务
+curl -X POST http://localhost:8080/api/v1/projects/1/generate \
   -H "Content-Type: application/json" \
   -d '{"mode":"auto","input":"用户需要支持手机号登录"}'
+
+# SSE 流
+curl -N http://localhost:8080/api/v1/generate/{taskId}/stream
+
+# 测试计划
+curl http://localhost:8080/api/v1/projects/1/plans
+
+# 测试报告
+curl http://localhost:8080/api/v1/projects/1/reports
+
+# Dashboard
+curl http://localhost:8080/api/v1/projects/1/dashboard
 ```
-
-期望：返回 `taskId` 和 `streamUrl`。
-
-### SSE 检查
-
-```bash
-curl -N http://127.0.0.1:5173/api/v1/generate/{taskId}/stream
-```
-
-期望：持续输出 `data: {...}`。
-
-后端直连验证也可使用：
-
-```bash
-curl -N http://127.0.0.1:8080/api/v1/generate/{taskId}/stream
-```
-
-当前后端 SSE 输出形态：
-
-```text
-id:1
-data:{"event":"stage_started","taskId":"...","stage":"e1","sequence":1,"timestamp":"...","payload":{"stage":"e1"}}
-```
-
-注意：不要依赖 SSE 协议层的 `event:` 行；业务事件类型统一读取 `data.event`。
-
-## 10. 已知限制与下一步
-
-当前限制：
-
-1. 工作台启动时还没有自动加载 `/projects` 和 `/cases`。
-2. 顶部统计仍基于前端节点计算，没有使用 `/cases/stats`。
-3. 节点编辑、删除、执行状态更新还没有持久化到后端。
-4. `selectedNodeId`、`contextCaseIds` 暂未接入生成请求。
-
-建议下一步：
-
-1. 页面初始化接入 `GET /api/v1/projects` 和 `GET /api/v1/projects/{projectId}/cases`。
-2. 用 `testCasesToMindNodes()` 将后端用例渲染为思维导图。
-3. 节点编辑后调用 `PUT /api/v1/cases/{caseId}`。
-4. 执行状态变更后调用 `PATCH /api/v1/cases/{caseId}/execution-status`。
-5. 用 `selectedNodeId` 和 `contextCaseIds` 把当前选区上下文传给生成接口。

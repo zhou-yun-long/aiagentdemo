@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GeneratedCaseJsonMapperTest {
 
@@ -47,5 +48,29 @@ class GeneratedCaseJsonMapperTest {
         List<GeneratedCaseDto> cases = GeneratedCaseJsonMapper.parseCases(response, List.of());
 
         assertEquals("登录成功并跳转首页", cases.get(0).expected());
+    }
+
+    @Test
+    void preservesTraceabilityIdsFromCommonAliases() {
+        String response = """
+                [
+                  {
+                    "title": "正确手机号密码登录成功",
+                    "precondition": "用户已注册",
+                    "steps": ["打开登录页", "输入正确账号密码", "点击登录"],
+                    "expected": "登录成功并跳转首页",
+                    "priority": "p0",
+                    "objectId": "obj-login-credential",
+                    "requirementId": "req-login-main"
+                  }
+                ]
+                """;
+
+        List<GeneratedCaseDto> cases = GeneratedCaseJsonMapper.parseCases(response, List.of());
+
+        assertEquals("P0", cases.get(0).priority());
+        assertTrue(cases.get(0).draftCaseId().startsWith("case-"));
+        assertEquals(List.of("obj-login-credential"), cases.get(0).objectIds());
+        assertEquals(List.of("req-login-main"), cases.get(0).requirementIds());
     }
 }
