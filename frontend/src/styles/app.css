@@ -1494,6 +1494,40 @@ button.small:disabled {
   display: none;
 }
 
+/* ── Generate Page (standalone) ── */
+.generate-page {
+  min-height: 100vh;
+  padding: 0 24px 48px;
+  background: var(--color-bg, #f8fafc);
+  color: var(--color-text, #1f2937);
+}
+
+.generate-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  border-bottom: 1px solid var(--color-border, #d9e1ec);
+  margin-bottom: 16px;
+}
+
+.generate-page-toast {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: #f6ffed;
+  color: #52c41a;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid #b7eb8f;
+}
+
+.generate-page-body .generate-panel {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
 .api-tab-hint {
   margin: 8px 0 4px;
   font-size: 12px;

@@ -127,10 +127,11 @@ test.describe('Project Layout & Sidebar', () => {
     await expect(page.locator('.top-bar-module')).toHaveText('用例管理');
   });
 
-  test('Generate page shows placeholder', async ({ page }) => {
+  test('Generate page loads with AI generation panel', async ({ page }) => {
     await mockProjectLayoutApis(page, PROJECT_ID);
 
     await page.goto(`/projects/${PROJECT_ID}/generate`);
-    await expect(page.locator('.page-placeholder')).toBeVisible();
+    await expect(page.locator('.generate-page')).toBeVisible();
+    await expect(page.locator('h1:has-text("用例生成")')).toBeVisible();
   });
 });

@@ -14,22 +14,10 @@ import ReportsPage from './pages/ReportsPage';
 import ReportDetailPage from './pages/ReportDetailPage';
 import DefectsPage from './pages/DefectsPage';
 import ReviewsPage from './pages/ReviewsPage';
+import GeneratePage from './pages/GeneratePage';
 import LegacyRedirect from './components/LegacyRedirect';
 import ProjectLayout from './layouts/ProjectLayout';
 import './styles/app.css';
-
-/**
- * 临时 GeneratePage：等 Phase 2 完成后替换为完整生成页。
- * 当前渲染空状态。
- */
-function GeneratePagePlaceholder() {
-  return (
-    <div className="page-placeholder">
-      <h2>用例生成</h2>
-      <p>模块开发中，即将上线</p>
-    </div>
-  );
-}
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -54,7 +42,7 @@ createRoot(document.getElementById('root')!).render(
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="cases" element={<CasesWorkspacePage />} />
-            <Route path="generate" element={<GeneratePagePlaceholder />} />
+            <Route path="generate" element={<GeneratePage />} />
             <Route path="plans" element={<PlansPage />} />
             <Route path="plans/:planId" element={<PlanDetailPage />} />
             <Route path="reports" element={<ReportsPage />} />
