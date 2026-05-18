@@ -1030,7 +1030,7 @@ textarea {
   min-height: 74px;
   padding: 10px;
   border-right: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -3765,12 +3765,12 @@ button.small:disabled {
 }
 
 .cases-tab {
-  padding: 8px 16px;
+  padding: 10px 18px;
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -3797,12 +3797,12 @@ button.small:disabled {
 }
 
 .cases-search-inline input {
-  height: 30px;
-  width: 180px;
-  padding: 0 8px;
+  height: 34px;
+  width: 200px;
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text);
   background: var(--surface);
 }
@@ -3849,24 +3849,24 @@ button.small:disabled {
 }
 
 .cases-filters input[type="text"] {
-  height: 32px;
-  width: 220px;
+  height: 36px;
+  width: 240px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  font-size: 14px;
+}
+
+.cases-filters select {
+  height: 36px;
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
   background: var(--surface);
-  font-size: 13px;
-}
-
-.cases-filters select {
-  height: 32px;
-  padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  background: var(--surface);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .cases-tag-filters {
@@ -3931,18 +3931,18 @@ button.small:disabled {
 .cases-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .cases-table th {
   position: sticky;
   top: 0;
-  padding: 8px 10px;
+  padding: 10px 12px;
   text-align: left;
   border-bottom: 1px solid var(--border);
   color: var(--muted);
   font-weight: 500;
-  font-size: 12px;
+  font-size: 13px;
   background: var(--surface-2);
   white-space: nowrap;
 }
@@ -3958,11 +3958,11 @@ button.small:disabled {
 
 .cases-table th .sort-arrow {
   margin-left: 4px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .cases-table td {
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
@@ -3999,9 +3999,9 @@ button.small:disabled {
 }
 
 .cases-table .steps-cell {
-  max-width: 200px;
+  max-width: 240px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -4018,13 +4018,13 @@ button.small:disabled {
 }
 
 .cases-table .actions-cell button {
-  height: 26px;
-  padding: 0 8px;
+  height: 28px;
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--muted);
   background: transparent;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .cases-table .actions-cell button:hover {
