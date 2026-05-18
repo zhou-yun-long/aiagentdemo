@@ -1,0 +1,983 @@
+# =============================================================================
+# Playwright E2E Test Plan — Testing Platform Frontend
+# =============================================================================
+# React 19 + TypeScript + Vite frontend
+# Backend API: http://localhost:8090
+# Dev server:  http://localhost:5173 (Vite default)
+#
+# Layout structure:
+#   - /projects is a standalone page (no sidebar)
+#   - /projects/:projectId/* wrapped in ProjectLayout
+#     (AppSidebar + ProjectTopBar + content)
+#   - /share/:token is a standalone share view
+# =============================================================================
+
+global:
+  baseURL: "http://localhost:5173"
+  apiBase: "http://localhost:8090"
+  locale: "zh-CN"
+  viewport:
+    width: 1280
+    height: 800
+
+suites:
+
+  # ===========================================================================
+  # Suite 1: Navigation & Routing
+  # ===========================================================================
+  - name: "Navigation & Routing"
+    description: "Verify all routes resolve correctly and redirect chains work."
+    tests:
+      - name: "Root redirects to /projects"
+        steps:
+          - navigate: "/"
+          - expect_url: "/projects"
+          - expect_visible: "h1:has-text('项目管理')"
+
+      - name: "Project sub-route redirects to dashboard"
+        steps:
+          - navigate: "/projects/1"
+          - expect_url: "/projects/1/dashboard"
+
+      - name: "Legacy /cases redirects to projects"
+        steps:
+          - navigate: "/cases"
+          - expect_url: "/projects"
+
+      - name: "Sidebar navigation links work"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - click: ".sidebar-nav-item:has-text('用例管理')"
+          - expect_url: "/projects/1/cases"
+          - click: ".sidebar-nav-item:has-text('测试计划')"
+          - expect_url: "/projects/1/plans"
+          - click: ".sidebar-nav-item:has-text('测试报告')"
+          - expect_url: "/projects/1/reports"
+          - click: ".sidebar-nav-item:has-text('仪表盘')"
+          - expect_url: "/projects/1/dashboard"
+
+      - name: "Breadcrumb shows correct hierarchy"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - expect_visible: ".top-bar-breadcrumb >> text=项目"
+          - expect_visible: ".top-bar-module >> text=仪表盘"
+          - navigate: "/projects/1/plans"
+          - expect_visible: ".top-bar-module >> text=测试计划"
+
+      - name: "Back button from project page returns to project list"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - click: ".back-button"
+          - expect_url: "/projects"
+
+  # ===========================================================================
+  # Suite 2: Projects Page (/projects)
+  # ===========================================================================
+  - name: "Projects Page"
+    description: "CRUD operations, filtering, search, sorting, and batch actions."
+    tests:
+      - name: "Page loads with project list"
+        steps:
+          - navigate: "/projects"
+          - expect_visible: "h1:has-text('项目管理')"
+          - expect_visible: ".projects-filter"
+          - expect_visible: ".projects-list"
+
+      - name: "Loading spinner shows while fetching"
+        steps:
+          - navigate: "/projects"
+          - expect_visible: ".projects-loading"
+
+      - name: "Filter tabs switch between active archived and all"
+        steps:
+          - navigate: "/projects"
+          - click: "button:has-text('活跃')"
+          - expect_visible: ".filter-count"
+          - click: "button:has-text('已归档')"
+          - click: "button:has-text('全部')"
+
+      - name: "Search filters projects by name and description"
+        steps:
+          - navigate: "/projects"
+          - fill: ".projects-search-bar input"
+          - with: "测试项目"
+          - expect_visible: ".project-card"
+          - fill: ".projects-search-bar input"
+          - with: "nonexistent_xyz_12345"
+          - expect_visible: ".projects-empty"
+
+      - name: "Sort dropdown changes project order"
+        steps:
+          - navigate: "/projects"
+          - select: ".projects-search-bar select"
+          - with: "按名称"
+          - select: ".projects-search-bar select"
+          - with: "按用例数"
+          - select: ".projects-search-bar select"
+          - with: "按更新时间"
+
+      - name: "Create project modal opens and saves"
+        steps:
+          - navigate: "/projects"
+          - click: "button:has-text('新建项目')"
+          - expect_visible: ".project-modal"
+          - fill: "#project-name"
+          - with: "E2E测试项目"
+          - fill: "#project-desc"
+          - with: "自动化测试创建的项目"
+          - click: ".project-modal .primary"
+          - expect_visible: ".project-card-name:has-text('E2E测试项目')"
+
+      - name: "Create project validates empty name"
+        steps:
+          - navigate: "/projects"
+          - click: "button:has-text('新建项目')"
+          - fill: "#project-name"
+          - with: ""
+          - click: ".project-modal .primary"
+          - expect_visible: ".project-modal"
+
+      - name: "Edit project modal opens with pre-filled data"
+        steps:
+          - navigate: "/projects"
+          - click: ".project-card:first-child button:has-text('编辑')"
+          - expect_visible: ".project-modal h2:has-text('编辑项目')"
+          - expect_visible: "#project-name"
+          - expect_visible: ".project-modal .read-only"
+
+      - name: "Archive project with confirmation"
+        steps:
+          - navigate: "/projects"
+          - click: ".project-card:first-child button:has-text('归档')"
+          - accept_dialog: true
+
+      - name: "Restore archived project"
+        steps:
+          - navigate: "/projects"
+          - click: "button:has-text('已归档')"
+          - click: ".project-card:first-child button:has-text('恢复')"
+
+      - name: "Select project and enter it"
+        steps:
+          - navigate: "/projects"
+          - click: ".project-card:first-child a:has-text('进入')"
+          - expect_url_contains: "/dashboard"
+
+      - name: "Batch select and archive"
+        steps:
+          - navigate: "/projects"
+          - click: "button:has-text('全部')"
+          - check: ".project-card-select input[type=checkbox]:first-child"
+          - expect_visible: ".projects-batch-bar"
+          - click: ".projects-batch-bar button:has-text('批量归档')"
+          - accept_dialog: true
+
+      - name: "Close modal with Escape key"
+        steps:
+          - navigate: "/projects"
+          - click: "button:has-text('新建项目')"
+          - expect_visible: ".project-modal"
+          - press_key: "Escape"
+          - expect_not_visible: ".project-modal"
+
+      - name: "Close modal by clicking overlay"
+        steps:
+          - navigate: "/projects"
+          - click: "button:has-text('新建项目')"
+          - expect_visible: ".project-modal"
+          - click: ".project-modal-overlay"
+          - expect_not_visible: ".project-modal"
+
+  # ===========================================================================
+  # Suite 3: Dashboard Page
+  # ===========================================================================
+  - name: "Dashboard Page"
+    description: "Stats display, status distribution, trend chart, recent activity."
+    tests:
+      - name: "Dashboard loads with stat cards"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - expect_visible: ".dashboard-page"
+          - expect_visible: ".dashboard-stats-grid"
+          - expect_visible: ".dashboard-stat-label:has-text('用例总数')"
+          - expect_visible: ".dashboard-stat-label:has-text('通过率')"
+          - expect_visible: ".dashboard-stat-label:has-text('已通过')"
+          - expect_visible: ".dashboard-stat-label:has-text('失败')"
+
+      - name: "Loading state shows spinner"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - expect_visible: ".page-status.loading"
+
+      - name: "Status distribution bar is rendered"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - expect_visible: ".dashboard-status-breakdown"
+          - expect_visible: ".dashboard-status-bar"
+          - expect_visible: ".dashboard-legend-item"
+
+      - name: "Quality trend chart section exists"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - expect_visible: ".dashboard-section-header:has-text('质量趋势')"
+          - expect_visible: ".dashboard-chart-wrapper"
+
+      - name: "Recent activity list renders"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - expect_visible: ".dashboard-section-header:has-text('最近活动')"
+
+      - name: "Refresh button reloads data"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - wait_for: ".dashboard-stats-grid"
+          - click: "button:has-text('刷新')"
+          - expect_visible: ".dashboard-stats-grid"
+
+      - name: "Error state shows retry button"
+        steps:
+          - mock_api: "/api/v1/projects/1/dashboard"
+          - with_status: 500
+          - navigate: "/projects/1/dashboard"
+          - expect_visible: ".dashboard-error"
+          - expect_visible: "button:has-text('重试')"
+
+  # ===========================================================================
+  # Suite 4: Cases Workspace Page
+  # ===========================================================================
+  - name: "Cases Workspace Page"
+    description: "List view, mindmap view toggle, filtering, sorting, CRUD, batch ops."
+    tests:
+      - name: "Cases page loads with default list view"
+        steps:
+          - navigate: "/projects/1/cases"
+          - expect_visible: ".cases-workspace"
+          - expect_visible: ".cases-workspace-tabs"
+          - expect_visible: ".cases-workspace-tab.active:has-text('列表视图')"
+
+      - name: "Toggle between list and mindmap view"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - expect_visible: ".cases-workspace-mindmap:not(.hidden)"
+          - expect_visible: ".cases-workspace-list.hidden"
+          - click: ".cases-workspace-tab:has-text('列表视图')"
+          - expect_visible: ".cases-workspace-list:not(.hidden)"
+
+      - name: "Case filter tabs switch correctly"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-tab:has-text('全部用例')"
+          - expect_css: ".cases-tab:has-text('全部用例') has_class active"
+          - click: ".cases-tab:has-text('未覆盖')"
+          - expect_css: ".cases-tab:has-text('未覆盖') has_class active"
+          - click: ".cases-tab:has-text('已废弃')"
+
+      - name: "Search cases by keyword"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-search-toggle button"
+          - fill: ".cases-search-inline input"
+          - with: "登录"
+          - expect_visible: ".cases-table tbody tr"
+
+      - name: "Case table displays with sortable columns"
+        steps:
+          - navigate: "/projects/1/cases"
+          - expect_visible: ".cases-table"
+          - expect_visible: "th:has-text('用例名称')"
+          - expect_visible: "th:has-text('优先级')"
+          - expect_visible: "th:has-text('状态')"
+          - expect_visible: "th:has-text('创建时间')"
+          - expect_visible: "th:has-text('操作')"
+
+      - name: "Sort by column header click"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: "th:has-text('用例名称')"
+          - expect_visible: ".sort-arrow"
+          - click: "th:has-text('优先级')"
+          - click: "th:has-text('状态')"
+          - click: "th:has-text('创建时间')"
+
+      - name: "Create new case via modal"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: "button:has-text('新建用例')"
+          - expect_visible: ".cases-modal h2:has-text('新建用例')"
+          - fill: "#case-title"
+          - with: "E2E自动化测试用例"
+          - select: "#case-priority"
+          - with: "P1"
+          - select: "#case-status"
+          - with: "not_run"
+          - fill: "#case-precondition"
+          - with: "用户已登录"
+          - fill: "#case-steps"
+          - with: "步骤1\n步骤2\n步骤3"
+          - fill: "#case-expected"
+          - with: "预期结果正常"
+          - click: ".cases-modal .primary"
+
+      - name: "Create case validates empty title"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: "button:has-text('新建用例')"
+          - fill: "#case-title"
+          - with: ""
+          - click: ".cases-modal .primary"
+          - expect_visible: ".cases-error"
+
+      - name: "Edit existing case"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-table tbody tr:first-child .title-cell"
+          - expect_visible: ".cases-modal h2:has-text('编辑用例')"
+          - expect_visible: "#case-title"
+          - expect_visible: ".cases-modal .read-only"
+          - fill: "#case-title"
+          - with: "已修改的用例标题"
+          - click: ".cases-modal .primary"
+
+      - name: "Delete single case with confirmation"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-table tbody tr:first-child button:has-text('删除')"
+          - accept_dialog: true
+
+      - name: "Select multiple cases for batch delete"
+        steps:
+          - navigate: "/projects/1/cases"
+          - check: ".cases-table tbody tr:first-child input[type=checkbox]"
+          - check: ".cases-table tbody tr:nth-child(2) input[type=checkbox]"
+          - expect_visible: "button:has-text('批量删除')"
+          - expect_visible: "button:has-text('取消选择')"
+
+      - name: "Select all checkbox"
+        steps:
+          - navigate: "/projects/1/cases"
+          - check: ".cases-table thead input[type=checkbox]"
+          - uncheck: ".cases-table thead input[type=checkbox]"
+
+      - name: "Export button generates CSV"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: "button:has-text('导出')"
+
+      - name: "Close case modal with Escape"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: "button:has-text('新建用例')"
+          - expect_visible: ".cases-modal"
+          - press_key: "Escape"
+          - expect_not_visible: ".cases-modal"
+
+      - name: "Add and remove tags in case modal"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: "button:has-text('新建用例')"
+          - fill: ".cases-modal-tag-input input"
+          - with: "E2E标签"
+          - click: ".cases-modal-tag-input button:has-text('添加')"
+          - expect_visible: ".cases-modal-tags .tag:has-text('E2E标签')"
+          - click: ".cases-modal-tags .tag:has-text('E2E标签')"
+
+  # ===========================================================================
+  # Suite 5: Mindmap Workspace
+  # ===========================================================================
+  - name: "Mindmap Workspace"
+    description: "Mindmap canvas interactions, toolbar, panels, node operations."
+    tests:
+      - name: "Mindmap view renders canvas"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - expect_visible: ".app"
+          - expect_visible: ".toolbar"
+          - expect_visible: ".workspace"
+
+      - name: "Toolbar contains all action buttons"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - expect_visible: ".toolbar .toolline"
+          - expect_visible: "button:has-text('撤销')"
+          - expect_visible: "button:has-text('重做')"
+          - expect_visible: "button:has-text('插入下级')"
+          - expect_visible: "button:has-text('插入同级')"
+          - expect_visible: "button:has-text('删除')"
+          - expect_visible: "button:has-text('保存')"
+
+      - name: "Stats bar shows pass rate and test count"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - expect_visible: ".stats"
+          - expect_visible: ".stats >> text=通过率"
+          - expect_visible: ".stats >> text=已测"
+
+      - name: "Outline panel toggles open and closed"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: "button:has-text('打开大纲')"
+          - click: "button:has-text('关闭大纲')"
+
+      - name: "AI assistant panel toggles"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: "button:has-text('打开AI助手')"
+          - click: "button:has-text('关闭AI助手')"
+
+      - name: "Summary panel toggles"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: "button:has-text('项目摘要')"
+          - click: "button:has-text('关闭摘要')"
+
+      - name: "Knowledge panel toggles"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: "button:has-text('知识库')"
+          - click: "button:has-text('关闭知识库')"
+
+      - name: "Snapshot panel toggles"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: "button:has-text('快照')"
+          - click: "button:has-text('关闭快照')"
+
+      - name: "Theme toggle switches between light and dark"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: "button[aria-label=切换主题]"
+
+      - name: "Export dropdown shows format options"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: "button:has-text('导出用例')"
+          - expect_visible: ".export-menu button:has-text('JSON')"
+          - expect_visible: ".export-menu button:has-text('CSV')"
+          - expect_visible: ".export-menu button:has-text('Markdown')"
+
+      - name: "Share panel opens"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: "button:has-text('用例分享')"
+
+      - name: "Traceability view toggles"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: "button:has-text('追踪视图')"
+          - click: "button:has-text('追踪视图')"
+
+      - name: "Undo and redo buttons are disabled initially"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - expect_css: "button:has-text('撤销') has_class disabled"
+          - expect_css: "button:has-text('重做') has_class disabled"
+
+      - name: "Layout mode toggle between double and single column"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: ".canvas-layout-toggle button:has-text('单列')"
+          - expect_css: ".canvas-layout-toggle button:has-text('单列') has_class active"
+          - click: ".canvas-layout-toggle button:has-text('双列')"
+
+      - name: "Edit dropdown shows sub-actions"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: "button:has-text('编辑')"
+          - expect_visible: ".tool-menu button:has-text('上移')"
+          - expect_visible: ".tool-menu button:has-text('下移')"
+          - expect_visible: ".tool-menu button:has-text('链接')"
+          - expect_visible: ".tool-menu button:has-text('图片')"
+          - expect_visible: ".tool-menu button:has-text('自动平衡布局')"
+
+      - name: "Tools dropdown shows sub-actions"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: "button:has-text('工具')"
+          - expect_visible: ".tool-menu button:has-text('清空画布')"
+          - expect_visible: ".tool-menu button:has-text('集成设置')"
+
+      - name: "Appearance panel shows theme font and size options"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: ".topline .tabs button:has-text('外观')"
+          - expect_visible: ".appearance-panel"
+          - expect_visible: "button:has-text('浅色')"
+          - expect_visible: "button:has-text('深色')"
+
+      - name: "View panel shows zoom controls"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: ".topline .tabs button:has-text('视图')"
+          - expect_visible: ".appearance-panel"
+          - expect_visible: "button:has-text('适应画布')"
+          - expect_visible: "button:has-text('重置 100%')"
+
+      - name: "Navigate to case management from toolbar"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - click: "button:has-text('用例管理')"
+          - expect_url_contains: "/cases"
+
+  # ===========================================================================
+  # Suite 6: Plans Page
+  # ===========================================================================
+  - name: "Plans Page"
+    description: "Plan list, create, delete, and navigate to detail."
+    tests:
+      - name: "Plans page loads with table"
+        steps:
+          - navigate: "/projects/1/plans"
+          - expect_visible: ".plans-page"
+          - expect_visible: "h1:has-text('测试计划')"
+
+      - name: "Empty state when no plans"
+        steps:
+          - mock_api: "/api/v1/projects/1/plans"
+          - with_body: "[]"
+          - navigate: "/projects/1/plans"
+          - expect_visible: ".plans-empty"
+
+      - name: "Plan table columns are correct"
+        steps:
+          - navigate: "/projects/1/plans"
+          - expect_visible: "th:has-text('计划名称')"
+          - expect_visible: "th:has-text('状态')"
+          - expect_visible: "th:has-text('用例数')"
+          - expect_visible: "th:has-text('通过数')"
+          - expect_visible: "th:has-text('创建时间')"
+          - expect_visible: "th:has-text('更新时间')"
+          - expect_visible: "th:has-text('操作')"
+
+      - name: "Plan status badges render correctly"
+        steps:
+          - navigate: "/projects/1/plans"
+          - expect_visible: ".plans-status-badge"
+
+      - name: "Create plan modal opens"
+        steps:
+          - navigate: "/projects/1/plans"
+          - click: "button:has-text('新建计划')"
+          - expect_visible: ".plans-modal h2:has-text('新建测试计划')"
+          - expect_visible: "#plan-name"
+          - expect_visible: "#plan-desc"
+
+      - name: "Create plan with name and case selection"
+        steps:
+          - navigate: "/projects/1/plans"
+          - click: "button:has-text('新建计划')"
+          - fill: "#plan-name"
+          - with: "E2E回归测试计划"
+          - fill: "#plan-desc"
+          - with: "自动化创建的测试计划"
+          - click: ".plans-select-all-btn"
+          - expect_visible: ".plans-case-count"
+          - click: ".plans-modal .primary"
+
+      - name: "Create plan validates empty name"
+        steps:
+          - navigate: "/projects/1/plans"
+          - click: "button:has-text('新建计划')"
+          - fill: "#plan-name"
+          - with: ""
+          - expect_css: ".plans-modal .primary has_class disabled"
+
+      - name: "Close plan modal with Escape"
+        steps:
+          - navigate: "/projects/1/plans"
+          - click: "button:has-text('新建计划')"
+          - expect_visible: ".plans-modal"
+          - press_key: "Escape"
+          - expect_not_visible: ".plans-modal"
+
+      - name: "Close plan modal by clicking overlay"
+        steps:
+          - navigate: "/projects/1/plans"
+          - click: "button:has-text('新建计划')"
+          - click: ".plans-modal-overlay"
+          - expect_not_visible: ".plans-modal"
+
+      - name: "Navigate to plan detail by clicking name"
+        steps:
+          - navigate: "/projects/1/plans"
+          - click: ".plans-name-cell a:first-child"
+          - expect_url_contains: "/plans/"
+
+      - name: "Navigate to plan detail via view button"
+        steps:
+          - navigate: "/projects/1/plans"
+          - click: ".plans-row-actions a:has-text('查看')"
+          - expect_url_contains: "/plans/"
+
+      - name: "Delete plan with confirmation"
+        steps:
+          - navigate: "/projects/1/plans"
+          - click: ".plans-row-actions button.danger:first-child"
+          - accept_dialog: true
+
+      - name: "Back button returns to dashboard"
+        steps:
+          - navigate: "/projects/1/plans"
+          - click: ".back-button:has-text('返回')"
+          - expect_url_contains: "/dashboard"
+
+  # ===========================================================================
+  # Suite 7: Plan Detail Page
+  # ===========================================================================
+  - name: "Plan Detail Page"
+    description: "Plan detail display, execution table, result updates, recompute."
+    tests:
+      - name: "Plan detail loads with header info"
+        steps:
+          - navigate: "/projects/1/plans/1"
+          - expect_visible: ".plans-page"
+          - expect_visible: ".plans-status-badge"
+          - expect_visible: ".plans-meta"
+
+      - name: "Plan description renders when present"
+        steps:
+          - navigate: "/projects/1/plans/1"
+          - expect_visible: ".plans-page p"
+
+      - name: "Execution table shows linked cases"
+        steps:
+          - navigate: "/projects/1/plans/1"
+          - expect_visible: ".plans-exec"
+          - expect_visible: ".plans-exec-header"
+          - expect_visible: "th:has-text('用例标题')"
+          - expect_visible: "th:has-text('执行结果')"
+          - expect_visible: "th:has-text('备注')"
+          - expect_visible: "th:has-text('当前状态')"
+
+      - name: "Empty execution table when no cases linked"
+        steps:
+          - mock_api: "/api/v1/plans/1"
+          - with_body: "plan=empty_cases"
+          - navigate: "/projects/1/plans/1"
+          - expect_visible: ".plans-exec-empty"
+
+      - name: "Update case execution result"
+        steps:
+          - navigate: "/projects/1/plans/1"
+          - select: ".plans-exec-select:first-child"
+          - with: "pass"
+          - click: ".plans-exec-submit:first-child"
+
+      - name: "Add note to case execution"
+        steps:
+          - navigate: "/projects/1/plans/1"
+          - fill: ".plans-exec-note:first-child"
+          - with: "自动化测试备注"
+          - click: ".plans-exec-submit:first-child"
+
+      - name: "Submit button disabled when no changes"
+        steps:
+          - navigate: "/projects/1/plans/1"
+          - expect_css: ".plans-exec-submit:first-child has_class disabled"
+
+      - name: "Recompute status button"
+        steps:
+          - navigate: "/projects/1/plans/1"
+          - click: "button:has-text('重算状态')"
+          - wait_for: "button:has-text('重算状态')"
+
+      - name: "Back button returns to plans list"
+        steps:
+          - navigate: "/projects/1/plans/1"
+          - click: ".back-button:has-text('返回')"
+          - expect_url: "/projects/1/plans"
+
+      - name: "Loading state shows spinner"
+        steps:
+          - navigate: "/projects/1/plans/1"
+          - expect_visible: ".plans-loading"
+
+      - name: "Error state shows error message"
+        steps:
+          - mock_api: "/api/v1/plans/1"
+          - with_status: 500
+          - navigate: "/projects/1/plans/1"
+          - expect_visible: ".plans-error"
+
+  # ===========================================================================
+  # Suite 8: Reports Page
+  # ===========================================================================
+  - name: "Reports Page"
+    description: "Report list display, navigation to detail."
+    tests:
+      - name: "Reports page loads"
+        steps:
+          - navigate: "/projects/1/reports"
+          - expect_visible: "h2:has-text('测试报告')"
+
+      - name: "Empty state when no reports"
+        steps:
+          - mock_api: "/api/v1/projects/1/reports"
+          - with_body: "[]"
+          - navigate: "/projects/1/reports"
+          - expect_visible: ".page-status.empty"
+
+      - name: "Report table columns are correct"
+        steps:
+          - navigate: "/projects/1/reports"
+          - expect_visible: "th:has-text('报告名称')"
+          - expect_visible: "th:has-text('通过率')"
+          - expect_visible: "th:has-text('关联计划')"
+          - expect_visible: "th:has-text('总用例')"
+          - expect_visible: "th:has-text('通过')"
+          - expect_visible: "th:has-text('失败')"
+          - expect_visible: "th:has-text('创建时间')"
+
+      - name: "Click report row navigates to detail"
+        steps:
+          - navigate: "/projects/1/reports"
+          - click: ".cases-table tbody tr:first-child"
+          - expect_url_contains: "/reports/"
+
+      - name: "Pass rate badge shows colored text"
+        steps:
+          - navigate: "/projects/1/reports"
+          - expect_visible: ".cases-table tbody tr:first-child td:nth-child(2) span"
+
+  # ===========================================================================
+  # Suite 9: Report Detail Page
+  # ===========================================================================
+  - name: "Report Detail Page"
+    description: "Report detail with pass rate, status breakdown, priority distribution."
+    tests:
+      - name: "Report detail loads with pass rate circle"
+        steps:
+          - navigate: "/projects/1/reports/1"
+          - expect_visible: "text=通过率"
+          - expect_visible: "text=用例通过"
+
+      - name: "Status breakdown bar renders"
+        steps:
+          - navigate: "/projects/1/reports/1"
+          - expect_visible: "text=执行状态分布"
+          - expect_visible: "text=通过"
+          - expect_visible: "text=失败"
+          - expect_visible: "text=阻塞"
+          - expect_visible: "text=跳过"
+          - expect_visible: "text=未执行"
+
+      - name: "Priority distribution section renders"
+        steps:
+          - navigate: "/projects/1/reports/1"
+          - expect_visible: "text=优先级分布"
+
+      - name: "Failed cases table renders when present"
+        steps:
+          - navigate: "/projects/1/reports/1"
+          - expect_visible: "text=失败用例"
+          - expect_visible: "th:has-text('用例标题')"
+          - expect_visible: "th:has-text('优先级')"
+          - expect_visible: "th:has-text('错误信息')"
+
+      - name: "Blocked cases table renders when present"
+        steps:
+          - navigate: "/projects/1/reports/1"
+          - expect_visible: "text=阻塞用例"
+
+      - name: "Export menu shows Excel and PDF options"
+        steps:
+          - navigate: "/projects/1/reports/1"
+          - click: "button:has-text('导出')"
+          - expect_visible: "button:has-text('导出 Excel')"
+          - expect_visible: "button:has-text('导出 PDF')"
+
+      - name: "Export Excel triggers download"
+        steps:
+          - navigate: "/projects/1/reports/1"
+          - click: "button:has-text('导出')"
+          - click: "button:has-text('导出 Excel')"
+
+      - name: "Export PDF triggers download"
+        steps:
+          - navigate: "/projects/1/reports/1"
+          - click: "button:has-text('导出')"
+          - click: "button:has-text('导出 PDF')"
+
+      - name: "Back button returns to reports list"
+        steps:
+          - navigate: "/projects/1/reports/1"
+          - click: "button:has-text('返回列表')"
+          - expect_url: "/projects/1/reports"
+
+      - name: "Loading state"
+        steps:
+          - navigate: "/projects/1/reports/1"
+          - expect_visible: ".page-status.loading"
+
+      - name: "Error state"
+        steps:
+          - mock_api: "/api/v1/reports/1"
+          - with_status: 500
+          - navigate: "/projects/1/reports/1"
+          - expect_visible: ".page-status.error-banner"
+
+      - name: "Report not found state"
+        steps:
+          - mock_api: "/api/v1/reports/99999"
+          - with_status: 404
+          - navigate: "/projects/1/reports/99999"
+          - expect_visible: "text=报告不存在"
+
+  # ===========================================================================
+  # Suite 10: Project Layout & Sidebar
+  # ===========================================================================
+  - name: "Project Layout & Sidebar"
+    description: "Sidebar navigation, collapse, project switcher, settings."
+    tests:
+      - name: "Sidebar renders with navigation items"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - expect_visible: ".app-sidebar"
+          - expect_visible: ".sidebar-logo"
+          - expect_visible: ".sidebar-nav-item:has-text('仪表盘')"
+          - expect_visible: ".sidebar-nav-item:has-text('用例管理')"
+          - expect_visible: ".sidebar-nav-item:has-text('用例生成')"
+          - expect_visible: ".sidebar-nav-item:has-text('测试计划')"
+          - expect_visible: ".sidebar-nav-item:has-text('测试报告')"
+
+      - name: "Active sidebar item is highlighted on dashboard"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - expect_css: ".sidebar-nav-item:has-text('仪表盘') has_class active"
+
+      - name: "Active sidebar item is highlighted on cases"
+        steps:
+          - navigate: "/projects/1/cases"
+          - expect_css: ".sidebar-nav-item:has-text('用例管理') has_class active"
+
+      - name: "Sidebar collapse and expand"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - click: ".sidebar-collapse-btn"
+          - expect_css: ".app-sidebar has_class collapsed"
+          - click: ".sidebar-collapse-btn"
+          - expect_css: ".app-sidebar not_class collapsed"
+
+      - name: "Project switcher dropdown works"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - select: ".sidebar-project-select"
+          - with: "2"
+          - expect_url_contains: "/projects/2/dashboard"
+
+      - name: "Settings section toggles open"
+        steps:
+          - navigate: "/projects/1/dashboard"
+          - click: ".sidebar-settings-toggle"
+          - expect_visible: ".sidebar-settings-group"
+          - expect_visible: ".sidebar-settings-group >> text=项目管理"
+          - expect_visible: ".sidebar-settings-group >> text=知识库"
+
+      - name: "Breadcrumb reflects current location"
+        steps:
+          - navigate: "/projects/1/cases"
+          - expect_visible: ".top-bar-breadcrumb >> text=项目"
+          - expect_visible: ".top-bar-module >> text=用例管理"
+
+      - name: "Generate page shows placeholder"
+        steps:
+          - navigate: "/projects/1/generate"
+          - expect_visible: ".page-placeholder"
+
+  # ===========================================================================
+  # Suite 11: Share View
+  # ===========================================================================
+  - name: "Share View"
+    description: "Shared view via token, read-only mode."
+    tests:
+      - name: "Share view loads with read-only banner"
+        steps:
+          - navigate: "/share/test-token-123"
+          - expect_visible: ".app"
+          - expect_visible: ".read-only-banner"
+
+      - name: "Read-only mode hides edit controls"
+        steps:
+          - navigate: "/share/test-token-123"
+          - expect_not_visible: ".toolline"
+
+  # ===========================================================================
+  # Suite 12: Cross-cutting Concerns
+  # ===========================================================================
+  - name: "Cross-cutting Concerns"
+    description: "Error handling, responsive behavior, keyboard shortcuts."
+    tests:
+      - name: "API error on projects page"
+        steps:
+          - mock_api: "/api/v1/projects"
+          - with_status: 500
+          - navigate: "/projects"
+          - expect_visible: ".projects-error"
+
+      - name: "API error on cases page"
+        steps:
+          - mock_api: "/api/v1/projects/1/cases"
+          - with_status: 500
+          - navigate: "/projects/1/cases"
+          - expect_visible: ".cases-error"
+
+      - name: "Keyboard shortcut Ctrl+Z triggers undo"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - press_key: "Control+z"
+
+      - name: "Keyboard shortcut Ctrl+Shift+Z triggers redo"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - press_key: "Control+Shift+z"
+
+      - name: "Keyboard shortcut Ctrl+A selects all nodes"
+        steps:
+          - navigate: "/projects/1/cases"
+          - click: ".cases-workspace-tab:has-text('思维导图视图')"
+          - press_key: "Control+a"
+
+      - name: "Dialog confirmation for destructive actions"
+        steps:
+          - navigate: "/projects"
+          - click: ".project-card:first-child button:has-text('归档')"
+          - expect_dialog: "确定归档项目"
+          - dismiss_dialog: true
+
+      - name: "Multiple projects with stats display correctly"
+        steps:
+          - navigate: "/projects"
+          - expect_visible: ".project-card-stats"
+          - expect_visible: ".project-stats-bar"
+
+      - name: "Project card shows correct status badge"
+        steps:
+          - navigate: "/projects"
+          - expect_visible: ".project-status-badge"
+
+      - name: "Date formatting is in Chinese locale"
+        steps:
+          - navigate: "/projects"
+          - expect_visible: ".project-card-meta >> text=创建:"
+          - expect_visible: ".project-card-meta >> text=更新:"
