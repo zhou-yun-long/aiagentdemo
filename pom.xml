@@ -119,6 +119,17 @@
             <artifactId>openpdf</artifactId>
             <version>2.0.2</version>
         </dependency>
+
+        <!-- PostgreSQL driver + pgvector vector store for RAG -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
+        </dependency>
     </dependencies>
 
     <profiles>

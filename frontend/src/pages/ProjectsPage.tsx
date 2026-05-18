@@ -24,7 +24,7 @@ export default function ProjectsPage() {
   const [sortField, setSortField] = useState<SortField>('updatedAt');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [editingProject, setEditingProject] = useState<ProjectDto | null>(null);
-  const [formName, setFormName] = useState('');
+  const [formName, setFormName] = useState<string | null>(null);
   const [formDesc, setFormDesc] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -86,12 +86,12 @@ export default function ProjectsPage() {
 
   const closeModal = () => {
     setEditingProject(null);
-    setFormName('');
+    setFormName(null);
     setFormDesc('');
   };
 
   const handleSave = async () => {
-    const name = formName.trim();
+    const name = formName?.trim() ?? '';
     if (!name) return;
     setSaving(true);
     try {
@@ -228,7 +228,7 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {formName !== '' || editingProject !== null ? (
+      {formName !== null ? (
         <div className="project-modal-overlay" onClick={closeModal}>
           <div className="project-modal" onClick={(e) => e.stopPropagation()}>
             <h2>{editingProject ? '编辑项目' : '新建项目'}</h2>
@@ -237,7 +237,7 @@ export default function ProjectsPage() {
               <input
                 id="project-name"
                 type="text"
-                value={formName}
+                value={formName ?? ''}
                 onChange={(e) => setFormName(e.target.value)}
                 autoFocus
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') closeModal(); }}
@@ -271,7 +271,7 @@ export default function ProjectsPage() {
               </div>
               <div className="right-actions">
                 <button onClick={closeModal}>取消</button>
-                <button className="primary" onClick={handleSave} disabled={saving || !formName.trim()}>
+                <button className="primary" onClick={handleSave} disabled={saving || !(formName?.trim())}>
                   {saving ? '保存中...' : editingProject ? '保存' : '创建'}
                 </button>
               </div>
@@ -341,7 +341,7 @@ export default function ProjectsPage() {
                         <span>更新: {formatDate(project.updatedAt)}</span>
                       </div>
                       <div className="project-card-actions">
-                        <Link to={`/?projectId=${project.id}`} className="ghost" style={{ textDecoration: 'none' }}>
+                        <Link to={`/projects/${project.id}/dashboard`} className="ghost" style={{ textDecoration: 'none' }}>
                           进入
                         </Link>
                         <button className="ghost" onClick={() => openEdit(project)}>编辑</button>

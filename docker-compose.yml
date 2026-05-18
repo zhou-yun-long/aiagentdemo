@@ -1,4 +1,16 @@
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: treeify_vectors
+      POSTGRES_USER: treeify
+      POSTGRES_PASSWORD: treeify123
+    volumes:
+      - treeify-vectors:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+
   backend:
     build: .
     ports:
@@ -9,6 +21,9 @@ services:
       OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-glm-4.6}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-embedding-3}
       RAG_ENABLED: ${RAG_ENABLED:-false}
+      SPRING_DATASOURCE_VECTORS_URL: jdbc:postgresql://postgres:5432/treeify_vectors
+      SPRING_DATASOURCE_VECTORS_USERNAME: treeify
+      SPRING_DATASOURCE_VECTORS_PASSWORD: treeify123
     volumes:
       - treeify-data:/app/data
     # Use public DNS servers to avoid Alpine DNS resolution issues in bridge mode
@@ -16,6 +31,8 @@ services:
       - 8.8.8.8
       - 1.1.1.1
       - 223.5.5.5
+    depends_on:
+      - postgres
     restart: unless-stopped
 
   frontend:
@@ -29,3 +46,4 @@ services:
 
 volumes:
   treeify-data:
+  treeify-vectors:
