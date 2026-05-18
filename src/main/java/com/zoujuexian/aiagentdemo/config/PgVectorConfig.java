@@ -1,7 +1,11 @@
 package com.zoujuexian.aiagentdemo.config;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.springframework.ai.document.MetadataMode;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.openai.OpenAiEmbeddingModel;
+import org.springframework.ai.openai.OpenAiEmbeddingOptions;
+import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -55,6 +59,26 @@ public class PgVectorConfig {
     public JdbcTemplate jdbcTemplateVectors(
             @Qualifier("dataSourceVectors") DataSource dataSourceVectors) {
         return new JdbcTemplate(dataSourceVectors);
+    }
+
+    /**
+     * EmbeddingModel using the dedicated embedding API (Gitee AI).
+     * Overrides the auto-configured one that uses the chat API base URL.
+     */
+    @Bean
+    @Primary
+    public EmbeddingModel embeddingModel(
+            @Value("${embedding.api.base-url}") String baseUrl,
+            @Value("${embedding.api.key}") String apiKey,
+            @Value("${embedding.api.model}") String model) {
+        OpenAiApi api = OpenAiApi.builder()
+                .baseUrl(baseUrl)
+                .apiKey(apiKey)
+                .build();
+        OpenAiEmbeddingOptions options = OpenAiEmbeddingOptions.builder()
+                .model(model)
+                .build();
+        return new OpenAiEmbeddingModel(api, MetadataMode.EMBED, options);
     }
 
     @Bean
