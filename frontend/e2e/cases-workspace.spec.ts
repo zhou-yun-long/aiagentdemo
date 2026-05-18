@@ -15,25 +15,30 @@ test.describe('Cases Workspace Page', () => {
     await setupMocks(page);
   });
 
-  test('Cases page loads with default list view', async ({ page }) => {
+  test('Cases page loads with mindmap and list both visible', async ({ page }) => {
     await page.goto(URL);
     await expect(page.locator('.cases-workspace')).toBeVisible();
-    await expect(page.locator('.cases-workspace-tabs')).toBeVisible();
-    await expect(page.locator('.cases-workspace-tab.active')).toHaveText(/列表视图/);
+    // Both mindmap and list should be visible simultaneously
+    await expect(page.locator('.cases-workspace-mindmap')).toBeVisible();
+    await expect(page.locator('.cases-workspace-list')).toBeVisible();
   });
 
-  test('Toggle between list and mindmap view', async ({ page }) => {
+  test('Mindmap and list sections have correct layout', async ({ page }) => {
     await page.goto(URL);
     await page.waitForSelector('.cases-workspace');
 
-    // Switch to mindmap
-    await page.locator('.cases-workspace-tab:has-text("思维导图视图")').click();
-    await expect(page.locator('.cases-workspace-mindmap')).not.toHaveClass(/hidden/);
-    await expect(page.locator('.cases-workspace-list')).toHaveClass(/hidden/);
+    // Mindmap should be on top, list below
+    const mindmap = page.locator('.cases-workspace-mindmap');
+    const list = page.locator('.cases-workspace-list');
+    await expect(mindmap).toBeVisible();
+    await expect(list).toBeVisible();
 
-    // Switch back to list
-    await page.locator('.cases-workspace-tab:has-text("列表视图")').click();
-    await expect(page.locator('.cases-workspace-list')).not.toHaveClass(/hidden/);
+    // Mindmap should be above list (check bounding boxes)
+    const mindmapBox = await mindmap.boundingBox();
+    const listBox = await list.boundingBox();
+    expect(mindmapBox).toBeTruthy();
+    expect(listBox).toBeTruthy();
+    expect(mindmapBox!.y).toBeLessThan(listBox!.y);
   });
 
   test('Case filter tabs switch correctly', async ({ page }) => {

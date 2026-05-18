@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { List, GitBranch, Loader2, Trash2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import {
   getProjectCases, getProjectCaseStats, deleteCase
 } from '../shared/api/treeify';
@@ -11,27 +11,14 @@ import { CaseFilterBar, type CaseTab } from '../components/CaseFilterBar';
 import { CaseDetailModal } from '../components/CaseDetailModal';
 import App from '../App';
 
-const VIEW_MODE_KEY = 'testing-platform.cases.viewMode';
-
 type SortField = 'title' | 'priority' | 'executionStatus' | 'createdAt';
-type ViewMode = 'list' | 'mindmap';
 
 const priorityRank: Record<Priority, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
-
-function readViewMode(): ViewMode {
-  try {
-    const v = localStorage.getItem(VIEW_MODE_KEY);
-    return v === 'mindmap' ? 'mindmap' : 'list';
-  } catch {
-    return 'list';
-  }
-}
 
 export default function CasesWorkspacePage() {
   const { projectId: projectIdParam } = useParams<{ projectId: string }>();
   const projectId = Number(projectIdParam);
 
-  const [viewMode, setViewMode] = useState<ViewMode>(readViewMode);
   const [cases, setCases] = useState<TestCaseDto[]>([]);
   const [stats, setStats] = useState<CaseStatsDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,11 +51,6 @@ export default function CasesWorkspacePage() {
   }, [projectId]);
 
   useEffect(() => { loadData(); }, [loadData]);
-
-  const handleViewChange = (mode: ViewMode) => {
-    setViewMode(mode);
-    try { localStorage.setItem(VIEW_MODE_KEY, mode); } catch { /* ignore */ }
-  };
 
   const filteredCases = useMemo(() => {
     let result = cases;
@@ -162,28 +144,13 @@ export default function CasesWorkspacePage() {
 
   return (
     <div className="cases-workspace">
-      <div className="cases-workspace-tabs">
-        <button
-          className={`cases-workspace-tab${viewMode === 'list' ? ' active' : ''}`}
-          onClick={() => handleViewChange('list')}
-        >
-          <List size={15} />
-          列表视图
-        </button>
-        <button
-          className={`cases-workspace-tab${viewMode === 'mindmap' ? ' active' : ''}`}
-          onClick={() => handleViewChange('mindmap')}
-        >
-          <GitBranch size={15} />
-          思维导图视图
-        </button>
-      </div>
-
-      {/* Both views stay mounted; CSS controls visibility to preserve unsaved state */}
-      <div className={`cases-workspace-mindmap${viewMode === 'mindmap' ? '' : ' hidden'}`}>
+      {/* 思维导图区域 */}
+      <div className="cases-workspace-mindmap">
         <App />
       </div>
-      <div className={`cases-workspace-list${viewMode === 'list' ? '' : ' hidden'}`}>
+
+      {/* 用例列表区域 */}
+      <div className="cases-workspace-list">
         {error && <div className="cases-error" onClick={loadData}>{error}（点击重试）</div>}
 
         {loading ? (

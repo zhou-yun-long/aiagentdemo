@@ -4461,58 +4461,18 @@ button.small:disabled {
   min-height: 0;
 }
 
-.cases-workspace-tabs {
-  display: flex;
-  gap: 0;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  flex-shrink: 0;
-}
-
-.cases-workspace-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  cursor: pointer;
-  transition: color 0.12s, border-color 0.12s;
-}
-
-.cases-workspace-tab:hover {
-  color: var(--text);
-}
-
-.cases-workspace-tab.active {
-  color: var(--blue);
-  border-bottom-color: var(--blue);
-  font-weight: 500;
-}
-
 .cases-workspace-mindmap {
-  flex: 1;
-  min-height: 0;
+  height: 50%;
+  min-height: 200px;
   overflow: hidden;
-}
-
-.cases-workspace-mindmap.hidden {
-  display: none;
+  border-bottom: 2px solid var(--border, #d9e1ec);
 }
 
 .cases-workspace-list {
-  flex: 1;
-  min-height: 0;
+  height: 50%;
+  min-height: 200px;
   overflow: auto;
   padding: 16px;
-}
-
-.cases-workspace-list.hidden {
-  display: none;
 }
 
 /* =============================================
